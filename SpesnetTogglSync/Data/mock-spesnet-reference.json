@@ -1,0 +1,32 @@
+{
+  "employeeId": 236,
+  "projects": [
+    { "id": 147, "projname": "Billing Rules Engine (BRE)" },
+    { "id": 181, "projname": "FEM -  Direct work for FEM not IMS (Billable)" },
+    { "id": 35, "projname": "IMS - Invoice Management System" },
+    { "id": 48, "projname": "Leave" },
+    { "id": 165, "projname": "PFT - Professional Focus Time" },
+    { "id": 47, "projname": "Sick Leave" },
+    { "id": 114, "projname": "Third Party System (Outsourced)" },
+    { "id": 100, "projname": "Time Off" },
+    { "id": 63, "projname": "Training" }
+  ],
+  "workTasks": [
+    { "id": 10, "descript": "Admin", "code": "EVO4" },
+    { "id": 18, "descript": "Analysis", "code": "ANA001" },
+    { "id": 41, "descript": "Automation Frameworks", "code": "TEST003" },
+    { "id": 7, "descript": "Development", "code": "EVO1" },
+    { "id": 9, "descript": "Meeting", "code": "EVO3" },
+    { "id": 13, "descript": "Support", "code": "EVO6" }
+  ],
+  "clientsByProject": {
+    "35": [
+      { "id": 7, "name": "FEM", "code": "FEM001" },
+      { "id": 48, "name": "RMA", "code": "RMA001" },
+      { "id": 9, "name": "Shared", "code": "SPE001" }
+    ],
+    "147": [
+      { "id": 9, "name": "Shared", "code": "SPE001" }
+    ]
+  }
+}
