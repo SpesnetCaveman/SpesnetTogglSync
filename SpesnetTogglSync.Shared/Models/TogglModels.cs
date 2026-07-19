@@ -69,5 +69,17 @@ public class TogglTimeEntry
     [JsonPropertyName("project_name")]
     public string? ProjectName { get; set; }
 
-    public DateTime StartUtc => DateTime.Parse(Start, null, System.Globalization.DateTimeStyles.RoundtripKind);
+    public DateTime StartUtc
+    {
+        get
+        {
+            var parsed = DateTime.Parse(Start, null, System.Globalization.DateTimeStyles.RoundtripKind);
+            return parsed.Kind switch
+            {
+                DateTimeKind.Utc => parsed,
+                DateTimeKind.Local => parsed.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(parsed, DateTimeKind.Utc)
+            };
+        }
+    }
 }

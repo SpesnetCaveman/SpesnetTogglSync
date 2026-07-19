@@ -81,7 +81,7 @@
             // 
             // StartSyncDateTimeControl
             // 
-            StartSyncDateTimeControl.CustomFormat = "yyyy-MM-dd HH:mm";
+            StartSyncDateTimeControl.CustomFormat = "yyyy-MM-dd HH:mm:ss";
             StartSyncDateTimeControl.Format = DateTimePickerFormat.Custom;
             StartSyncDateTimeControl.Location = new Point(94, 14);
             StartSyncDateTimeControl.Name = "StartSyncDateTimeControl";

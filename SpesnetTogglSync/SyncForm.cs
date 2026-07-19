@@ -54,8 +54,9 @@ public partial class SyncForm : Form
         UseMockSpesnetCheckBox.Checked = _settings.UseMockSpesnet;
         LoadSettingsIntoUi();
 
-        var watermark = _syncState.LastSyncedStartTime?.ToLocalTime()
-            ?? DateTime.Now.AddDays(-30);
+        var watermark = _syncState.LastSyncedStartTime is DateTime stored
+            ? ToUtc(stored).ToLocalTime()
+            : DateTime.Now.AddDays(-30);
         StartSyncDateTimeControl.Value = watermark;
 
         LogTextBox.Text = _logger.ReadTodayLog();
@@ -118,7 +119,8 @@ public partial class SyncForm : Form
             }
         }
 
-        _syncState.LastSyncedStartTime = StartSyncDateTimeControl.Value.ToUniversalTime();
+        // Keep full-precision syncstate when the picker only reflects it at display resolution.
+        _syncState.LastSyncedStartTime = GetSyncWatermarkUtc();
         _configService.SaveSyncState(_syncState);
     }
 
@@ -1007,7 +1009,7 @@ public partial class SyncForm : Form
             var syncService = new SyncService(togglClient, spesnetClient, _configService, _logger);
             syncService.Progress += SyncService_Progress;
 
-            var watermark = StartSyncDateTimeControl.Value.ToUniversalTime();
+            var watermark = GetSyncWatermarkUtc();
             var result = await syncService.SyncAsync(
                 watermark,
                 GetCurrentUserMappings(),
@@ -1016,9 +1018,10 @@ public partial class SyncForm : Form
 
             if (result.LastSyncedStartTime.HasValue)
             {
-                StartSyncDateTimeControl.Value = result.LastSyncedStartTime.Value.ToLocalTime();
-                _syncState.LastSyncedStartTime = result.LastSyncedStartTime;
+                var syncedUtc = ToUtc(result.LastSyncedStartTime.Value);
+                _syncState.LastSyncedStartTime = syncedUtc;
                 _configService.SaveSyncState(_syncState);
+                StartSyncDateTimeControl.Value = syncedUtc.ToLocalTime();
             }
 
             StatusLabel.Text = result.Message;
@@ -1056,9 +1059,40 @@ public partial class SyncForm : Form
         StatusLabel.Text = e.Message;
         if (e.UpdatedWatermark.HasValue)
         {
-            StartSyncDateTimeControl.Value = e.UpdatedWatermark.Value.ToLocalTime();
+            var watermarkUtc = ToUtc(e.UpdatedWatermark.Value);
+            _syncState.LastSyncedStartTime = watermarkUtc;
+            StartSyncDateTimeControl.Value = watermarkUtc.ToLocalTime();
         }
     }
+
+    /// <summary>
+    /// Watermark for sync is exclusive (entries with start &gt; watermark).
+    /// Prefer the full-precision value in syncstate when the picker still shows the same
+    /// second (DateTimePicker can lose sub-second / Kind fidelity on round-trip).
+    /// </summary>
+    private DateTime GetSyncWatermarkUtc()
+    {
+        var pickerUtc = ToUtc(StartSyncDateTimeControl.Value.ToUniversalTime());
+        if (_syncState.LastSyncedStartTime is not DateTime stored)
+        {
+            return pickerUtc;
+        }
+
+        var storedUtc = ToUtc(stored);
+        return TruncateToSecond(pickerUtc) == TruncateToSecond(storedUtc)
+            ? storedUtc
+            : pickerUtc;
+    }
+
+    private static DateTime ToUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
+
+    private static DateTime TruncateToSecond(DateTime value) =>
+        new(value.Ticks - (value.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
 
     private TogglApiClient CreateTogglClient() => new(_settings.TogglApiToken, _logger);
 

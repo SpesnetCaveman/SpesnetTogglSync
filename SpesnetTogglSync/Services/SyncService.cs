@@ -33,7 +33,8 @@ public class SyncService
         SpesnetReferenceCache referenceCache,
         CancellationToken cancellationToken = default)
     {
-        _logger.Info($"Sync started from watermark {watermarkUtc:u}");
+        watermarkUtc = ToUtc(watermarkUtc);
+        _logger.Info($"Sync started from watermark {watermarkUtc:o} (exclusive; only starts after this)");
         Report("Fetching Toggl time entries...");
 
         var unresolved = FindUnresolvedMappings(mappings);
@@ -191,12 +192,13 @@ public class SyncService
             Report($"Syncing Toggl entry {entry.Id} ({entry.StartUtc:yyyy-MM-dd HH:mm})...");
             await _spesnetClient.SaveWorkEntriesAsync(request, cancellationToken);
 
-            currentWatermark = entry.StartUtc;
+            // Exclusive watermark: next sync only takes entries with start > this value.
+            currentWatermark = ToUtc(entry.StartUtc);
             syncedCount++;
 
             var syncState = new SyncState { LastSyncedStartTime = currentWatermark };
             _configService.SaveSyncState(syncState);
-            _logger.Info($"Synced {FormatEntryLabel(entry)}; watermark updated to {currentWatermark:u}");
+            _logger.Info($"Synced {FormatEntryLabel(entry)}; watermark updated to {currentWatermark:o} (next sync requires start > watermark)");
             Report($"Synced entry {entry.Id}", currentWatermark);
         }
 
@@ -216,6 +218,13 @@ public class SyncService
 
     private static bool IsRunning(TogglTimeEntry entry) =>
         entry.Duration < 0 || string.IsNullOrWhiteSpace(entry.Stop);
+
+    private static DateTime ToUtc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
 
     /// <summary>
     /// Watermark is entry start only, so overlaps still sync when starts differ.
