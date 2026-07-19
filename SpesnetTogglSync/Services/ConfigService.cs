@@ -8,6 +8,13 @@ public class ConfigService
 {
     public const string ConfigLocationFileName = "config-location.json";
 
+    private static readonly string[] DataFileNames =
+    [
+        "appsettings.json",
+        "mappings.json",
+        "syncstate.json"
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -16,7 +23,7 @@ public class ConfigService
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
-    private readonly string _baseDirectory;
+    private string _baseDirectory;
     private readonly string _installDirectory;
 
     public ConfigService(string? baseDirectory = null)
@@ -34,6 +41,7 @@ public class ConfigService
     private string AppSettingsPath => Path.Combine(_baseDirectory, "appsettings.json");
     private string SyncStatePath => Path.Combine(_baseDirectory, "syncstate.json");
     private string MappingsPath => Path.Combine(_baseDirectory, "mappings.json");
+    private string ConfigLocationPath => Path.Combine(_installDirectory, ConfigLocationFileName);
 
     /// <summary>
     /// Reads <c>config-location.json</c> next to the exe (if present) to locate the
@@ -59,17 +67,37 @@ public class ConfigService
                 return install;
             }
 
-            var resolved = Path.IsPathRooted(configured)
-                ? configured
-                : Path.GetFullPath(Path.Combine(install, configured));
-
-            Directory.CreateDirectory(resolved);
-            return resolved;
+            return ResolvePath(configured, install);
         }
         catch
         {
             return install;
         }
+    }
+
+    /// <summary>
+    /// Writes the bootstrap pointer, creates the directory, optionally copies missing
+    /// data files from the previous directory, then ensures config files and logs/ exist.
+    /// </summary>
+    public string ApplyDataDirectory(string? configuredPath)
+    {
+        var previousDirectory = _baseDirectory;
+        var trimmed = configuredPath?.Trim() ?? string.Empty;
+        var resolved = string.IsNullOrWhiteSpace(trimmed)
+            ? _installDirectory
+            : ResolvePath(trimmed, _installDirectory);
+
+        Directory.CreateDirectory(resolved);
+
+        if (!string.Equals(previousDirectory, resolved, StringComparison.OrdinalIgnoreCase))
+        {
+            CopyDataFilesIfMissing(previousDirectory, resolved);
+        }
+
+        WriteConfigLocation(resolved);
+        _baseDirectory = resolved;
+        EnsureConfigFilesExist();
+        return resolved;
     }
 
     public AppSettings LoadSettings()
@@ -122,6 +150,76 @@ public class ConfigService
         }
 
         return userMappings;
+    }
+
+    public void EnsureConfigFilesExist()
+    {
+        Directory.CreateDirectory(_baseDirectory);
+        Directory.CreateDirectory(Path.Combine(_baseDirectory, "logs"));
+
+        if (!File.Exists(AppSettingsPath))
+        {
+            LoadSettings();
+        }
+
+        if (!File.Exists(MappingsPath))
+        {
+            SaveMappings(new MappingsFile());
+        }
+
+        if (!File.Exists(SyncStatePath))
+        {
+            SaveSyncState(new SyncState());
+        }
+    }
+
+    private void WriteConfigLocation(string dataDirectory)
+    {
+        WriteJson(ConfigLocationPath, new ConfigLocation { DataDirectory = dataDirectory });
+    }
+
+    private static string ResolvePath(string configured, string installDirectory)
+    {
+        return Path.IsPathRooted(configured)
+            ? Path.GetFullPath(configured)
+            : Path.GetFullPath(Path.Combine(installDirectory, configured));
+    }
+
+    private static void CopyDataFilesIfMissing(string sourceDirectory, string targetDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(sourceDirectory) ||
+            !Directory.Exists(sourceDirectory) ||
+            string.Equals(sourceDirectory, targetDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        foreach (var fileName in DataFileNames)
+        {
+            var sourcePath = Path.Combine(sourceDirectory, fileName);
+            var targetPath = Path.Combine(targetDirectory, fileName);
+            if (File.Exists(sourcePath) && !File.Exists(targetPath))
+            {
+                File.Copy(sourcePath, targetPath);
+            }
+        }
+
+        var sourceLogs = Path.Combine(sourceDirectory, "logs");
+        var targetLogs = Path.Combine(targetDirectory, "logs");
+        if (!Directory.Exists(sourceLogs))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(targetLogs);
+        foreach (var sourceLog in Directory.EnumerateFiles(sourceLogs))
+        {
+            var targetLog = Path.Combine(targetLogs, Path.GetFileName(sourceLog));
+            if (!File.Exists(targetLog))
+            {
+                File.Copy(sourceLog, targetLog);
+            }
+        }
     }
 
     private T? ReadJson<T>(string path) where T : class

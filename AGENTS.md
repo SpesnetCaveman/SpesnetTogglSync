@@ -87,7 +87,7 @@ Never commit `appsettings.json`, `syncstate.json`, `mappings.json`, `config-loca
 
 ## Data directory (bootstrap)
 
-`config-location.json` next to the exe is a small pointer (`dataDirectory`) so settings/mappings/syncstate/logs can live under a cloud-backed folder. Read it first; if missing, use the install directory. Do not put the data path only inside `appsettings.json` (chicken-and-egg).
+`config-location.json` next to the exe is a small pointer (`dataDirectory`) so settings/mappings/syncstate/logs can live under a cloud-backed folder. Read it first; if missing, use the install directory. Do not put the data path only inside `appsettings.json` (chicken-and-egg). The Settings tab exposes Data Directory; Save Settings writes the pointer, creates the folder, copies missing files from the previous data directory when needed, and creates any missing config files.
 
 ## Coding preferences
 

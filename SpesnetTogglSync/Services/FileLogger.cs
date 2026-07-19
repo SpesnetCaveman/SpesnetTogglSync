@@ -4,7 +4,7 @@ namespace SpesnetTogglSync.Services;
 
 public class FileLogger : IApiLogger
 {
-    private readonly string _logDirectory;
+    private string _logDirectory;
     private readonly object _lock = new();
     public event EventHandler<string>? LogWritten;
 
@@ -12,6 +12,15 @@ public class FileLogger : IApiLogger
     {
         _logDirectory = Path.Combine(baseDirectory ?? AppContext.BaseDirectory, "logs");
         Directory.CreateDirectory(_logDirectory);
+    }
+
+    public void SetBaseDirectory(string baseDirectory)
+    {
+        lock (_lock)
+        {
+            _logDirectory = Path.Combine(baseDirectory, "logs");
+            Directory.CreateDirectory(_logDirectory);
+        }
     }
 
     public void Info(string message) => Write("INFO", message);

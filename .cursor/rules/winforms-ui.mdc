@@ -12,6 +12,7 @@ alwaysApply: false
 - Tabs: Sync Log, Mapping, Settings.
 - Mapping toolbar: Save Mappings, dirty label, Refresh Spesnet Reference Data, Refresh from Toggl.
 - Prefer editing `SyncForm.Designer.cs` for control layout; keep async/event wiring in `SyncForm.cs`.
+- Settings includes Data Directory (writes `config-location.json` on Save Settings; creates folder and missing config files; copies from previous data dir when the new folder lacks them).
 
 ## Mapping grid
 

@@ -32,6 +32,8 @@
             MappingGrid = new DataGridView();
             settingsTabPage = new TabPage();
             SaveSettingsButton = new Button();
+            DataDirectoryTextBox = new TextBox();
+            dataDirectoryLabel = new Label();
             SpesnetDomainTextBox = new TextBox();
             spesnetDomainLabel = new Label();
             SpesnetPasswordTextBox = new TextBox();
@@ -65,7 +67,7 @@
             topPanel.Location = new Point(0, 0);
             topPanel.Name = "topPanel";
             topPanel.Padding = new Padding(12);
-            topPanel.Size = new Size(1968, 72);
+            topPanel.Size = new Size(1550, 72);
             topPanel.TabIndex = 0;
             // 
             // syncFromLabel
@@ -101,7 +103,7 @@
             StatusLabel.AutoEllipsis = true;
             StatusLabel.Location = new Point(15, 44);
             StatusLabel.Name = "StatusLabel";
-            StatusLabel.Size = new Size(1680, 20);
+            StatusLabel.Size = new Size(1260, 20);
             StatusLabel.TabIndex = 3;
             StatusLabel.Text = "Ready";
             // 
@@ -127,7 +129,7 @@
             mainTabControl.Location = new Point(0, 72);
             mainTabControl.Name = "mainTabControl";
             mainTabControl.SelectedIndex = 0;
-            mainTabControl.Size = new Size(1968, 489);
+            mainTabControl.Size = new Size(1550, 489);
             mainTabControl.TabIndex = 1;
             // 
             // logTabPage
@@ -136,7 +138,7 @@
             logTabPage.Location = new Point(4, 29);
             logTabPage.Name = "logTabPage";
             logTabPage.Padding = new Padding(8);
-            logTabPage.Size = new Size(1960, 456);
+            logTabPage.Size = new Size(1542, 456);
             logTabPage.TabIndex = 0;
             logTabPage.Text = "Sync Log";
             logTabPage.UseVisualStyleBackColor = true;
@@ -149,7 +151,7 @@
             LogTextBox.Name = "LogTextBox";
             LogTextBox.ReadOnly = true;
             LogTextBox.ScrollBars = ScrollBars.Vertical;
-            LogTextBox.Size = new Size(1944, 440);
+            LogTextBox.Size = new Size(1526, 440);
             LogTextBox.TabIndex = 0;
             // 
             // mappingTabPage
@@ -162,7 +164,7 @@
             mappingTabPage.Location = new Point(4, 29);
             mappingTabPage.Name = "mappingTabPage";
             mappingTabPage.Padding = new Padding(8);
-            mappingTabPage.Size = new Size(1960, 456);
+            mappingTabPage.Size = new Size(1542, 456);
             mappingTabPage.TabIndex = 1;
             mappingTabPage.Text = "Mapping";
             mappingTabPage.UseVisualStyleBackColor = true;
@@ -191,7 +193,7 @@
             // RefreshSpesnetButton
             // 
             RefreshSpesnetButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            RefreshSpesnetButton.Location = new Point(1570, 8);
+            RefreshSpesnetButton.Location = new Point(1152, 8);
             RefreshSpesnetButton.Name = "RefreshSpesnetButton";
             RefreshSpesnetButton.Size = new Size(220, 29);
             RefreshSpesnetButton.TabIndex = 2;
@@ -202,7 +204,7 @@
             // RefreshTogglButton
             // 
             RefreshTogglButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            RefreshTogglButton.Location = new Point(1796, 8);
+            RefreshTogglButton.Location = new Point(1378, 8);
             RefreshTogglButton.Name = "RefreshTogglButton";
             RefreshTogglButton.Size = new Size(153, 29);
             RefreshTogglButton.TabIndex = 3;
@@ -217,12 +219,14 @@
             MappingGrid.Location = new Point(8, 43);
             MappingGrid.Name = "MappingGrid";
             MappingGrid.RowHeadersWidth = 51;
-            MappingGrid.Size = new Size(1944, 405);
+            MappingGrid.Size = new Size(1526, 405);
             MappingGrid.TabIndex = 4;
             // 
             // settingsTabPage
             // 
             settingsTabPage.Controls.Add(SaveSettingsButton);
+            settingsTabPage.Controls.Add(DataDirectoryTextBox);
+            settingsTabPage.Controls.Add(dataDirectoryLabel);
             settingsTabPage.Controls.Add(SpesnetDomainTextBox);
             settingsTabPage.Controls.Add(spesnetDomainLabel);
             settingsTabPage.Controls.Add(SpesnetPasswordTextBox);
@@ -234,27 +238,44 @@
             settingsTabPage.Location = new Point(4, 29);
             settingsTabPage.Name = "settingsTabPage";
             settingsTabPage.Padding = new Padding(8);
-            settingsTabPage.Size = new Size(1960, 456);
+            settingsTabPage.Size = new Size(1542, 456);
             settingsTabPage.TabIndex = 2;
             settingsTabPage.Text = "Settings";
             settingsTabPage.UseVisualStyleBackColor = true;
             // 
             // SaveSettingsButton
             // 
-            SaveSettingsButton.Location = new Point(11, 286);
+            SaveSettingsButton.Location = new Point(11, 339);
             SaveSettingsButton.Name = "SaveSettingsButton";
             SaveSettingsButton.Size = new Size(130, 29);
-            SaveSettingsButton.TabIndex = 11;
+            SaveSettingsButton.TabIndex = 13;
             SaveSettingsButton.Text = "Save Settings";
             SaveSettingsButton.UseVisualStyleBackColor = true;
             SaveSettingsButton.Click += SaveSettingsButton_Click;
+            // 
+            // DataDirectoryTextBox
+            // 
+            DataDirectoryTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            DataDirectoryTextBox.Location = new Point(11, 243);
+            DataDirectoryTextBox.Name = "DataDirectoryTextBox";
+            DataDirectoryTextBox.Size = new Size(1516, 27);
+            DataDirectoryTextBox.TabIndex = 10;
+            // 
+            // dataDirectoryLabel
+            // 
+            dataDirectoryLabel.AutoSize = true;
+            dataDirectoryLabel.Location = new Point(11, 220);
+            dataDirectoryLabel.Name = "dataDirectoryLabel";
+            dataDirectoryLabel.Size = new Size(424, 20);
+            dataDirectoryLabel.TabIndex = 9;
+            dataDirectoryLabel.Text = "Data Directory (settings, mappings, sync state, logs)";
             // 
             // SpesnetDomainTextBox
             // 
             SpesnetDomainTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             SpesnetDomainTextBox.Location = new Point(11, 190);
             SpesnetDomainTextBox.Name = "SpesnetDomainTextBox";
-            SpesnetDomainTextBox.Size = new Size(1934, 27);
+            SpesnetDomainTextBox.Size = new Size(1516, 27);
             SpesnetDomainTextBox.TabIndex = 8;
             // 
             // spesnetDomainLabel
@@ -272,7 +293,7 @@
             SpesnetPasswordTextBox.Location = new Point(11, 137);
             SpesnetPasswordTextBox.Name = "SpesnetPasswordTextBox";
             SpesnetPasswordTextBox.PasswordChar = '*';
-            SpesnetPasswordTextBox.Size = new Size(1934, 27);
+            SpesnetPasswordTextBox.Size = new Size(1516, 27);
             SpesnetPasswordTextBox.TabIndex = 6;
             // 
             // spesnetPasswordLabel
@@ -289,7 +310,7 @@
             SpesnetUsernameTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             SpesnetUsernameTextBox.Location = new Point(11, 84);
             SpesnetUsernameTextBox.Name = "SpesnetUsernameTextBox";
-            SpesnetUsernameTextBox.Size = new Size(1934, 27);
+            SpesnetUsernameTextBox.Size = new Size(1516, 27);
             SpesnetUsernameTextBox.TabIndex = 4;
             // 
             // spesnetUsernameLabel
@@ -306,7 +327,7 @@
             TogglApiTokenTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             TogglApiTokenTextBox.Location = new Point(11, 31);
             TogglApiTokenTextBox.Name = "TogglApiTokenTextBox";
-            TogglApiTokenTextBox.Size = new Size(1934, 27);
+            TogglApiTokenTextBox.Size = new Size(1516, 27);
             TogglApiTokenTextBox.TabIndex = 2;
             // 
             // togglApiTokenLabel
@@ -364,10 +385,10 @@
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1968, 561);
+            ClientSize = new Size(1550, 561);
             Controls.Add(mainTabControl);
             Controls.Add(topPanel);
-            MinimumSize = new Size(1800, 600);
+            MinimumSize = new Size(1550, 600);
             Name = "SyncForm";
             Text = "Toggl to Spesnet Sync";
             FormClosing += SyncForm_FormClosing;
@@ -409,6 +430,8 @@
         private TextBox SpesnetPasswordTextBox;
         private Label spesnetDomainLabel;
         private TextBox SpesnetDomainTextBox;
+        private Label dataDirectoryLabel;
+        private TextBox DataDirectoryTextBox;
         private Button SaveSettingsButton;
         private DataGridViewComboBoxColumn StatusColumn;
         private DataGridViewComboBoxColumn TogglClientColumn;

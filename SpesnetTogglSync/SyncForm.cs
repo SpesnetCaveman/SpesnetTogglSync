@@ -128,6 +128,7 @@ public partial class SyncForm : Form
         SpesnetUsernameTextBox.Text = _settings.SpesnetUsername;
         SpesnetPasswordTextBox.Text = _settings.SpesnetPassword;
         SpesnetDomainTextBox.Text = _settings.SpesnetDomain;
+        DataDirectoryTextBox.Text = _configService.DataDirectory;
     }
 
     private void SaveSettingsFromUi()
@@ -139,6 +140,34 @@ public partial class SyncForm : Form
         _settings.UseMockSpesnet = UseMockSpesnetCheckBox.Checked;
         _settings.SpesnetReferenceCache = _referenceCache;
         _configService.SaveSettings(_settings);
+    }
+
+    private bool TryApplyDataDirectoryFromUi()
+    {
+        try
+        {
+            var previousDirectory = _configService.DataDirectory;
+            var resolved = _configService.ApplyDataDirectory(DataDirectoryTextBox.Text);
+            DataDirectoryTextBox.Text = resolved;
+            _logger.SetBaseDirectory(resolved);
+
+            if (!string.Equals(previousDirectory, resolved, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Info($"Data directory set to: {resolved}");
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                $"Could not set the data directory: {ex.Message}",
+                "Data Directory",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return false;
+        }
     }
 
     private async Task InitializeTogglContextAsync()
@@ -844,6 +873,11 @@ public partial class SyncForm : Form
 
     private void SaveSettingsButton_Click(object sender, EventArgs e)
     {
+        if (!TryApplyDataDirectoryFromUi())
+        {
+            return;
+        }
+
         SaveSettingsFromUi();
         _logger.Info("Settings saved.");
         StatusLabel.Text = "Settings saved.";
