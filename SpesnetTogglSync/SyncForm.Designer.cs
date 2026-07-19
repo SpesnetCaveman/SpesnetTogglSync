@@ -48,6 +48,7 @@
             SpesnetProjectColumn = new DataGridViewComboBoxColumn();
             SpesnetClientColumn = new DataGridViewComboBoxColumn();
             SpesnetWorkTaskColumn = new DataGridViewComboBoxColumn();
+            CommentPrefixColumn = new DataGridViewTextBoxColumn();
             topPanel.SuspendLayout();
             mainTabControl.SuspendLayout();
             logTabPage.SuspendLayout();
@@ -87,6 +88,7 @@
             StartSyncDateTimeControl.Name = "StartSyncDateTimeControl";
             StartSyncDateTimeControl.Size = new Size(191, 27);
             StartSyncDateTimeControl.TabIndex = 1;
+            StartSyncDateTimeControl.ValueChanged += StartSyncDateTimeControl_ValueChanged;
             // 
             // StartSyncButton
             // 
@@ -379,7 +381,14 @@
             SpesnetWorkTaskColumn.HeaderText = "Spesnet Work Task";
             SpesnetWorkTaskColumn.MinimumWidth = 6;
             SpesnetWorkTaskColumn.Name = "SpesnetWorkTaskColumn";
-            SpesnetWorkTaskColumn.Width = 480;
+            SpesnetWorkTaskColumn.Width = 400;
+            // 
+            // CommentPrefixColumn
+            // 
+            CommentPrefixColumn.HeaderText = "Comment Prefix";
+            CommentPrefixColumn.MinimumWidth = 6;
+            CommentPrefixColumn.Name = "CommentPrefixColumn";
+            CommentPrefixColumn.Width = 140;
             // 
             // SyncForm
             // 
@@ -439,5 +448,6 @@
         private DataGridViewComboBoxColumn SpesnetProjectColumn;
         private DataGridViewComboBoxColumn SpesnetClientColumn;
         private DataGridViewComboBoxColumn SpesnetWorkTaskColumn;
+        private DataGridViewTextBoxColumn CommentPrefixColumn;
     }
 }

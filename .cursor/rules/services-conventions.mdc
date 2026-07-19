@@ -8,7 +8,8 @@ alwaysApply: false
 
 ## SyncService
 
-- Fail-fast validation before Spesnet writes.
+- Fail-fast validation before Spesnet writes (including required Toggl description; whitespace-only is missing).
+- User-facing validation / abort messages show entry times in South African (GMT+2 / SAST), not UTC.
 - Only completed Toggl entries sync (`duration < 0` or null `stop` → warn and stop; defer later entries so start-based watermark cannot orphan the runner).
 - Watermark is entry `StartUtc` only (exclusive `>`; overlaps still sync); log a warning when ranges overlap.
 - Spesnet `txdatetime` is the entry start in South African (GMT+2) local time, not UTC.

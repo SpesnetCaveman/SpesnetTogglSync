@@ -54,6 +54,12 @@ public class EntryMapping
     public int SpesnetWorkTaskId { get; set; }
     public string SpesnetWorkTaskName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Optional text prepended to the Toggl description when building the Spesnet comment.
+    /// Concatenated as-is (no extra separator). Empty by default.
+    /// </summary>
+    public string CommentPrefix { get; set; } = string.Empty;
+
     public bool IsClientLevelIgnore =>
         Status == EntryMappingStatus.Ignore &&
         TogglProjectId == 0 &&

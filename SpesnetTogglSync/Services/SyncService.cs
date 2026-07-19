@@ -88,14 +88,18 @@ public class SyncService
 
             if (!entry.ClientId.HasValue || string.IsNullOrWhiteSpace(entry.ClientName))
             {
-                var message = $"Toggl entry at {entry.StartUtc:yyyy-MM-dd HH:mm} UTC is missing a client.";
+                var message =
+                    $"Toggl entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST is missing a client. " +
+                    "Assign a client in Toggl, then sync again.";
                 _logger.Error(message);
                 return Fail(message);
             }
 
             if (!entry.ProjectId.HasValue || string.IsNullOrWhiteSpace(entry.ProjectName))
             {
-                var message = $"Toggl entry at {entry.StartUtc:yyyy-MM-dd HH:mm} UTC is missing a project.";
+                var message =
+                    $"Toggl entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST is missing a project. " +
+                    "Assign a project in Toggl, then sync again.";
                 _logger.Error(message);
                 return Fail(message);
             }
@@ -114,7 +118,8 @@ public class SyncService
             if (mapping == null)
             {
                 var message =
-                    $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}'. " +
+                    $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' " +
+                    $"(entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST). " +
                     "Refresh from Toggl on the Mapping tab so the row appears, then set Active or Ignore.";
                 _logger.Error(message);
                 return Fail(message);
@@ -133,8 +138,19 @@ public class SyncService
             if (mapping.Status == EntryMappingStatus.New)
             {
                 var message =
-                    $"Mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' is still New. " +
+                    $"Mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' is still New " +
+                    $"(entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST). " +
                     "Set it to Active or Ignore before syncing.";
+                _logger.Error(message);
+                return Fail(message);
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.Description))
+            {
+                var message =
+                    $"Toggl entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST " +
+                    $"('{entry.ClientName}' / '{entry.ProjectName}') has no description. " +
+                    "Add a description in Toggl, then sync again.";
                 _logger.Error(message);
                 return Fail(message);
             }
@@ -192,7 +208,7 @@ public class SyncService
             var workDoneEntries = TransformEntry(entry, employeeId, mapping);
             var request = new SpesnetSaveWorkRequest { WorkDoneList = workDoneEntries };
 
-            Report($"Syncing Toggl entry {entry.Id} ({entry.StartUtc:yyyy-MM-dd HH:mm})...");
+            Report($"Syncing Toggl entry {entry.Id} ({FormatSouthAfricaDateTime(entry.StartUtc)} SAST)...");
             await _spesnetClient.SaveWorkEntriesAsync(request, cancellationToken);
 
             // Exclusive watermark: next sync only takes entries with start > this value.
@@ -229,15 +245,18 @@ public class SyncService
         _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
     };
 
+    private static DateTime ToSouthAfricaLocal(DateTime startUtc) =>
+        TimeZoneInfo.ConvertTimeFromUtc(ToUtc(startUtc), SouthAfricaTimeZone);
+
+    /// <summary>User-facing entry time in South African time (GMT+2).</summary>
+    private static string FormatSouthAfricaDateTime(DateTime utc) =>
+        ToSouthAfricaLocal(utc).ToString("yyyy-MM-dd HH:mm");
+
     /// <summary>
     /// Entry start in South African time (GMT+2), in the Spesnet API shape.
     /// </summary>
-    private static string ToSpesnetTxDateTime(DateTime startUtc)
-    {
-        var southAfricaLocal = TimeZoneInfo
-            .ConvertTimeFromUtc(ToUtc(startUtc), SouthAfricaTimeZone);
-        return southAfricaLocal.ToString("yyyy-MM-dd'T'HH:mm:ss.fff");
-    }
+    private static string ToSpesnetTxDateTime(DateTime startUtc) =>
+        ToSouthAfricaLocal(startUtc).ToString("yyyy-MM-dd'T'HH:mm:ss.fff");
 
     private static TimeZoneInfo ResolveSouthAfricaTimeZone()
     {
@@ -278,7 +297,7 @@ public class SyncService
             {
                 _logger.Warn(
                     $"Overlapping Toggl entries: {FormatEntryLabel(previous)} " +
-                    $"(ends {previousEnd:yyyy-MM-dd HH:mm} UTC) overlaps {FormatEntryLabel(current)}. " +
+                    $"(ends {FormatSouthAfricaDateTime(previousEnd)} SAST) overlaps {FormatEntryLabel(current)}. " +
                     "Both will sync because watermark tracks start time only.");
             }
         }
@@ -289,7 +308,7 @@ public class SyncService
         var description = string.IsNullOrWhiteSpace(entry.Description)
             ? "(no description)"
             : entry.Description!;
-        return $"entry {entry.Id} at {entry.StartUtc:yyyy-MM-dd HH:mm} UTC '{description}'";
+        return $"entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST '{description}'";
     }
 
     /// <summary>
@@ -326,31 +345,42 @@ public class SyncService
     {
         foreach (var entry in entries)
         {
+            var when = FormatSouthAfricaDateTime(entry.StartUtc);
             var mapping = FindEntryMapping(mappings, entry);
             if (mapping == null)
             {
-                return $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}'. Configure it on the Mapping tab.";
+                return
+                    $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' " +
+                    $"(entry {entry.Id} at {when} SAST). Configure it on the Mapping tab.";
             }
 
             if (!mapping.HasSpesnetDestination)
             {
-                return $"Active mapping for '{entry.ClientName}' / '{entry.ProjectName}' is missing Spesnet project, client, or work task.";
+                return
+                    $"Active mapping for '{entry.ClientName}' / '{entry.ProjectName}' is missing Spesnet project, client, or work task " +
+                    $"(entry {entry.Id} at {when} SAST).";
             }
 
             if (!referenceCache.Projects.Any(p => p.Id == mapping.SpesnetProjectId))
             {
-                return $"Mapped Spesnet project id {mapping.SpesnetProjectId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found.";
+                return
+                    $"Mapped Spesnet project id {mapping.SpesnetProjectId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found " +
+                    $"(entry {entry.Id} at {when} SAST).";
             }
 
             if (!referenceCache.ClientsByProject.TryGetValue(mapping.SpesnetProjectId, out var clients) ||
                 clients.All(c => c.Id != mapping.SpesnetClientId))
             {
-                return $"Mapped Spesnet client id {mapping.SpesnetClientId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found for project {mapping.SpesnetProjectId}.";
+                return
+                    $"Mapped Spesnet client id {mapping.SpesnetClientId} for '{entry.ClientName}' / '{entry.ProjectName}' " +
+                    $"was not found for project {mapping.SpesnetProjectId} (entry {entry.Id} at {when} SAST).";
             }
 
             if (!referenceCache.WorkTasks.Any(w => w.Id == mapping.SpesnetWorkTaskId))
             {
-                return $"Mapped Spesnet work task id {mapping.SpesnetWorkTaskId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found.";
+                return
+                    $"Mapped Spesnet work task id {mapping.SpesnetWorkTaskId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found " +
+                    $"(entry {entry.Id} at {when} SAST).";
             }
         }
 
@@ -395,7 +425,8 @@ public class SyncService
         var remaining = totalHours;
         // Spesnet expects the start in South African time (GMT+2), not UTC.
         var txDateTime = ToSpesnetTxDateTime(entry.StartUtc);
-        var comment = string.IsNullOrWhiteSpace(entry.Description) ? "(no description)" : entry.Description!;
+        // Description is validated before write; whitespace-only is rejected earlier.
+        var comment = (mapping.CommentPrefix ?? string.Empty) + entry.Description!.Trim();
         var result = new List<SpesnetWorkDoneEntry>();
 
         while (remaining > 0)

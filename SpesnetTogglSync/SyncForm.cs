@@ -380,7 +380,8 @@ public partial class SyncForm : Form
                     string.IsNullOrWhiteSpace(mapping.TogglProjectName) ? string.Empty : mapping.TogglProjectName,
                     mapping.SpesnetProjectId > 0 ? mapping.SpesnetProjectId : DBNull.Value,
                     mapping.SpesnetClientId > 0 ? mapping.SpesnetClientId : DBNull.Value,
-                    mapping.SpesnetWorkTaskId > 0 ? mapping.SpesnetWorkTaskId : DBNull.Value);
+                    mapping.SpesnetWorkTaskId > 0 ? mapping.SpesnetWorkTaskId : DBNull.Value,
+                    mapping.CommentPrefix ?? string.Empty);
                 MappingGrid.Rows[^1].Tag = mapping;
             }
 
@@ -435,6 +436,7 @@ public partial class SyncForm : Form
             var projectId = GetSelectedId(row.Cells[SpesnetProjectColumn.Index].Value);
             var clientId = GetSelectedId(row.Cells[SpesnetClientColumn.Index].Value);
             var workTaskId = GetSelectedId(row.Cells[SpesnetWorkTaskColumn.Index].Value);
+            var commentPrefix = Convert.ToString(row.Cells[CommentPrefixColumn.Index].Value) ?? string.Empty;
 
             userMappings.EntryMappings.Add(new EntryMapping
             {
@@ -448,7 +450,8 @@ public partial class SyncForm : Form
                 SpesnetClientId = clientId,
                 SpesnetClientName = projectId > 0 && clientId > 0 ? GetClientName(projectId, clientId) : string.Empty,
                 SpesnetWorkTaskId = workTaskId,
-                SpesnetWorkTaskName = workTaskId > 0 ? GetWorkTaskName(workTaskId) : string.Empty
+                SpesnetWorkTaskName = workTaskId > 0 ? GetWorkTaskName(workTaskId) : string.Empty,
+                CommentPrefix = commentPrefix
             });
         }
 
@@ -578,6 +581,7 @@ public partial class SyncForm : Form
         MappingGrid.Columns.Add(SpesnetProjectColumn);
         MappingGrid.Columns.Add(SpesnetClientColumn);
         MappingGrid.Columns.Add(SpesnetWorkTaskColumn);
+        MappingGrid.Columns.Add(CommentPrefixColumn);
 
         StatusColumn.DataSource = StatusDisplayValues;
         // ComboBox cells ignore CellStyle.BackColor with the default FlatStyle;
@@ -1148,5 +1152,10 @@ public partial class SyncForm : Form
     {
         public int Id { get; } = id;
         public string Name { get; } = name;
+    }
+
+    private void StartSyncDateTimeControl_ValueChanged(object sender, EventArgs e)
+    {
+
     }
 }

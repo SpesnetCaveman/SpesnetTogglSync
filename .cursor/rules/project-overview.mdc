@@ -16,16 +16,17 @@ WinForms (.NET 10) app that syncs **Toggl Track** → **Spesnet/EvolveMed Timeke
 - One entry mapping: status (`Active` / `Ignore` / `New`) + Toggl **client + project** → Spesnet **project + client + work task**
 - Auto-populate all live Toggl client+project pairs; new pairs start as `New` and block sync until Active or Ignore.
 - Client-only Ignore covers every project for that client.
-- Toggl description → Spesnet **comment**
+- Spesnet **comment** = mapping `CommentPrefix` + Toggl description (prefix defaults empty; concatenated as-is)
 
 Spesnet clients: `GET api/Client/GetClientsByProject?projectId=` (project first).
 
 ## Non-negotiable sync rules
 
 - Watermark advances only after a successful save; persist immediately.
-- Validate all candidates before any write; abort with clear missing-map / missing client-project / unresolved-New messages.
+- Validate all candidates before any write; abort with clear missing-map / missing client-project / missing-description / unresolved-New messages (entry times in SAST).
 - Skip Ignore mappings (and client-level Ignore); one Toggl time-entry API call per sync when possible (`start_date` + `end_date` + `meta=true`).
 - Sync only completed Toggl entries; a running timer defers later entries so the start-based watermark cannot skip it. Overlaps still sync; log a warning.
+- Description required on Active sync candidates (whitespace-only counts as missing).
 - Split entries > 8h into ≤8h `normalHours` chunks.
 - Keep mock Spesnet path (`UseMockSpesnet`) working alongside the real client.
 

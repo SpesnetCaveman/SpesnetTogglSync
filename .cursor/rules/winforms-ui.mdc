@@ -16,7 +16,7 @@ alwaysApply: false
 
 ## Mapping grid
 
-- One grid: Status → Toggl client → Toggl project (filtered by client; empty allowed) → Spesnet project → Spesnet client → Spesnet work task.
+- One grid: Status → Toggl client → Toggl project (filtered by client; empty allowed) → Spesnet project → Spesnet client → Spesnet work task → Comment Prefix (textbox, default empty).
 - Status cell colors: Active=green, Ignore=blue, New=amber (painted on the closed combo cell via CellPainting).
 - Auto-populate one row per live Toggl client+project on Refresh from Toggl; new pairs start as `New` and mark mappings dirty until Save.
 - Client-only row (empty project) with Status=`Ignore` covers all projects for that client.
