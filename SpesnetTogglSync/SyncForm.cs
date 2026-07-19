@@ -569,6 +569,7 @@ public partial class SyncForm : Form
     private void InitializeMappingGrids()
     {
         MappingGrid.AutoGenerateColumns = false;
+        MappingGrid.EditMode = DataGridViewEditMode.EditOnEnter;
         MappingGrid.Columns.Add(StatusColumn);
         MappingGrid.Columns.Add(TogglClientColumn);
         MappingGrid.Columns.Add(TogglProjectColumn);
@@ -583,6 +584,7 @@ public partial class SyncForm : Form
         StatusColumn.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
 
         MappingGrid.EditingControlShowing += MappingGrid_EditingControlShowing;
+        MappingGrid.CellClick += MappingGrid_CellClick;
         MappingGrid.CellValueChanged += MappingGrid_CellValueChanged;
         MappingGrid.CellPainting += MappingGrid_CellPainting;
         MappingGrid.CurrentCellDirtyStateChanged += MappingGrid_CurrentCellDirtyStateChanged;
@@ -656,6 +658,22 @@ public partial class SyncForm : Form
         }
     }
 
+    private void MappingGrid_CellClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+        {
+            return;
+        }
+
+        if (MappingGrid.Columns[e.ColumnIndex] is not DataGridViewComboBoxColumn)
+        {
+            return;
+        }
+
+        MappingGrid.BeginEdit(true);
+        DropDownEditingComboDeferred();
+    }
+
     private void MappingGrid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
     {
         if (e.Control is not ComboBox comboBox)
@@ -684,6 +702,9 @@ public partial class SyncForm : Form
         }
         else if (MappingGrid.CurrentCell?.OwningColumn == TogglProjectColumn && MappingGrid.CurrentRow != null)
         {
+            // Cascade lists live on the cell; the editing control does not pick them up
+            // automatically for per-row DataSources — copy them across without skipping
+            // DroppedDown (CellClick / DropDownEditingComboDeferred opens the list after).
             UpdateTogglProjectComboForRow(MappingGrid.CurrentRow);
             SyncEditingComboWithCell(comboBox, (DataGridViewComboBoxCell)MappingGrid.CurrentCell);
         }
@@ -696,6 +717,19 @@ public partial class SyncForm : Form
             UpdateSpesnetClientComboForRow(MappingGrid.CurrentRow);
             SyncEditingComboWithCell(comboBox, (DataGridViewComboBoxCell)MappingGrid.CurrentCell);
         }
+    }
+
+    private void DropDownEditingComboDeferred()
+    {
+        // Defer so DataSource sync in EditingControlShowing finishes, and so the
+        // activating click does not immediately dismiss the list.
+        BeginInvoke(() =>
+        {
+            if (MappingGrid.EditingControl is ComboBox comboBox && !comboBox.DroppedDown)
+            {
+                comboBox.DroppedDown = true;
+            }
+        });
     }
 
     private void StatusCombo_SelectedIndexChanged(object? sender, EventArgs e)
@@ -713,9 +747,15 @@ public partial class SyncForm : Form
         editingCombo.ValueMember = cell.ValueMember;
         editingCombo.DataSource = cell.DataSource;
 
+        if (cell.Value is null)
+        {
+            editingCombo.SelectedIndex = -1;
+            return;
+        }
+
         if (!string.IsNullOrEmpty(cell.ValueMember))
         {
-            editingCombo.SelectedValue = cell.Value!;
+            editingCombo.SelectedValue = cell.Value;
         }
         else
         {
@@ -725,22 +765,40 @@ public partial class SyncForm : Form
 
     private void TogglClientCombo_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        if (MappingGrid.CurrentRow == null)
+        if (MappingGrid.CurrentRow == null || sender is not ComboBox comboBox)
         {
             return;
         }
 
-        UpdateTogglProjectComboForRow(MappingGrid.CurrentRow);
+        // Use the editing control's new value — the cell may not have committed yet.
+        var clientName = Convert.ToString(comboBox.SelectedItem) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(clientName) && comboBox.SelectedIndex < 0)
+        {
+            return;
+        }
+
+        UpdateTogglProjectComboForRow(MappingGrid.CurrentRow, clientName);
     }
 
     private void SpesnetProjectCombo_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        if (MappingGrid.CurrentRow == null)
+        if (MappingGrid.CurrentRow == null || sender is not ComboBox comboBox)
         {
             return;
         }
 
-        UpdateSpesnetClientComboForRow(MappingGrid.CurrentRow);
+        if (comboBox.SelectedIndex < 0 && comboBox.SelectedValue is null && comboBox.SelectedItem is null)
+        {
+            return;
+        }
+
+        var projectId = GetSelectedId(comboBox.SelectedValue ?? comboBox.SelectedItem);
+        if (projectId <= 0 && comboBox.SelectedItem is null)
+        {
+            return;
+        }
+
+        UpdateSpesnetClientComboForRow(MappingGrid.CurrentRow, projectId);
     }
 
     private void MappingGrid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
@@ -766,9 +824,11 @@ public partial class SyncForm : Form
         MarkMappingsDirty();
     }
 
-    private void UpdateTogglProjectComboForRow(DataGridViewRow row)
+    private void UpdateTogglProjectComboForRow(DataGridViewRow row, string? togglClientNameOverride = null)
     {
-        var togglClientName = Convert.ToString(row.Cells[TogglClientColumn.Index].Value) ?? string.Empty;
+        var togglClientName = togglClientNameOverride
+            ?? Convert.ToString(row.Cells[TogglClientColumn.Index].Value)
+            ?? string.Empty;
         var togglClient = _togglClients.FirstOrDefault(c =>
             string.Equals(c.Name, togglClientName, StringComparison.OrdinalIgnoreCase));
 
@@ -795,9 +855,10 @@ public partial class SyncForm : Form
         projectCell.Value = match ?? string.Empty;
     }
 
-    private void UpdateSpesnetClientComboForRow(DataGridViewRow row)
+    private void UpdateSpesnetClientComboForRow(DataGridViewRow row, int? projectIdOverride = null)
     {
-        var projectId = GetSelectedId(row.Cells[SpesnetProjectColumn.Index].Value);
+        var projectId = projectIdOverride
+            ?? GetSelectedId(row.Cells[SpesnetProjectColumn.Index].Value);
         var clients = projectId > 0 && _referenceCache.ClientsByProject.TryGetValue(projectId, out var projectClients)
             ? projectClients.Select(c => new ComboItem(c.Id, c.Name)).ToArray()
             : Array.Empty<ComboItem>();
