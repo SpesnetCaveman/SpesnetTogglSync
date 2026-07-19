@@ -19,7 +19,8 @@ Solution projects:
 
 ## Domain mapping (do not invent alternate mappings)
 
-- One **entry mapping** matches on Toggl **client + project** together and sets Spesnet **project id + client id + work task id**.
+- One **entry mapping** matches on Toggl **client + project** together and sets Spesnet **project id + client id + work task id**, plus a **status** (`Active` / `Ignore` / `New`).
+- Mapping list is auto-populated with one row per live Toggl client+project; newly discovered pairs start as `New`.
 - Spesnet clients are loaded per project via `GetClientsByProject` (project first).
 - Toggl **description** → Spesnet **comment**.
 - Sync only for the **current Toggl user**; mappings are stored **per Toggl user id** in `mappings.json`.
@@ -29,7 +30,7 @@ Solution projects:
 
 1. **Watermark**: `syncstate.json` / DateTimePicker — only entries with `start > watermark`. After each successful Spesnet save for a Toggl entry, persist the new watermark immediately.
 2. **Validate all, then write**: mapping/client/project validation runs on the full candidate set before any Spesnet save. Fail with a user-facing message naming the missing map.
-3. **Selected clients only**: unchecked Toggl clients are skipped (not an error). Require ≥1 selected client.
+3. **Mapping status**: each entry mapping is `Active`, `Ignore`, or `New`. Sync is blocked while any relevant row remains `New`. `Ignore` skips entries; `Active` requires full Spesnet destination. A client-only row (empty project) with `Ignore` skips every project for that client.
 4. **Missing Toggl client or project** on an entry → abort; include entry date/time in the message.
 5. **Duration > 8 hours** → split into multiple Spesnet rows ≤ 8h; always use `normalHours` (overtime = 0).
 6. **Minimize Toggl calls**: sync uses `GET /me/time_entries?start_date=&meta=true`. Clients/projects fetch only for mapping UI refresh.
@@ -50,7 +51,7 @@ When a debugger is attached, `Debugger.Break()` runs there. Inspect locals: `aiP
 
 | Path | Role |
 |------|------|
-| `SpesnetTogglSync/SyncForm.cs` | UI: sync bar, tabs (log, clients, mappings, settings) |
+| `SpesnetTogglSync/SyncForm.cs` | UI: sync bar, tabs (log, mapping, settings) |
 | `SpesnetTogglSync/Services/SyncService.cs` | Orchestration, validation, transform, watermark |
 | `SpesnetTogglSync.TogglApi/TogglApiClient.cs` | Toggl Track API v9 (token auth) |
 | `SpesnetTogglSync.TogglApi/TogglApiHttp.cs` | Central Toggl send + failure breakpoint |

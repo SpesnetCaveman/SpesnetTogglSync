@@ -9,18 +9,20 @@ alwaysApply: false
 ## Layout
 
 - Top bar: watermark DateTimePicker, Start Sync, mock checkbox, status.
-- Tabs: Sync Log, Toggl Clients (CheckedListBox), Mapping, Settings.
+- Tabs: Sync Log, Mapping, Settings.
 - Prefer editing `SyncForm.Designer.cs` for control layout; keep async/event wiring in `SyncForm.cs`.
 
 ## Mapping grid
 
-- One grid: Toggl client → Toggl project (filtered by client) → Spesnet project → Spesnet client → Spesnet work task.
+- One grid: Status → Toggl client → Toggl project (filtered by client; empty allowed) → Spesnet project → Spesnet client → Spesnet work task.
+- Auto-populate one row per live Toggl client+project on Refresh from Toggl; new pairs start as `New`.
+- Client-only row (empty project) with Status=`Ignore` covers all projects for that client.
 - Reload Toggl projects when the Toggl client combo changes; reload Spesnet clients when the Spesnet project combo changes.
-- Persist selections/mappings on close and before sync via `SaveMappingsFromUi`.
+- Persist mappings on close and before sync via `SaveMappingsFromUi`.
 
 ## Behaviour
 
 - Disable sync/refresh buttons while async work runs.
 - Marshal logger UI updates with `Invoke`/`BeginInvoke` when needed.
 - On load: restore watermark, settings, mappings; optionally auto-load Spesnet reference (especially mock).
-- Require Spesnet reference cache + ≥1 checked Toggl client before starting sync.
+- Require Spesnet reference cache; block sync while any relevant mapping remains `New`.

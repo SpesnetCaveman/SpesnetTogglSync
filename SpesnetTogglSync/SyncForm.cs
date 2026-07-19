@@ -7,6 +7,13 @@ namespace SpesnetTogglSync;
 
 public partial class SyncForm : Form
 {
+    private static readonly string[] StatusDisplayValues =
+    [
+        nameof(EntryMappingStatus.Active),
+        nameof(EntryMappingStatus.Ignore),
+        nameof(EntryMappingStatus.New)
+    ];
+
     private readonly ConfigService _configService = new();
     private readonly FileLogger _logger = new();
     private AppSettings _settings = new();
@@ -81,7 +88,6 @@ public partial class SyncForm : Form
         SpesnetUsernameTextBox.Text = _settings.SpesnetUsername;
         SpesnetPasswordTextBox.Text = _settings.SpesnetPassword;
         SpesnetDomainTextBox.Text = _settings.SpesnetDomain;
-        AspNetUserIdTextBox.Text = _settings.AspNetUserId;
     }
 
     private void SaveSettingsFromUi()
@@ -90,7 +96,6 @@ public partial class SyncForm : Form
         _settings.SpesnetUsername = SpesnetUsernameTextBox.Text.Trim();
         _settings.SpesnetPassword = SpesnetPasswordTextBox.Text;
         _settings.SpesnetDomain = SpesnetDomainTextBox.Text.Trim();
-        _settings.AspNetUserId = AspNetUserIdTextBox.Text.Trim();
         _settings.UseMockSpesnet = UseMockSpesnetCheckBox.Checked;
         _settings.SpesnetReferenceCache = _referenceCache;
         _configService.SaveSettings(_settings);
@@ -135,8 +140,9 @@ public partial class SyncForm : Form
         {
             _togglClients = (await togglClient.GetClientsAsync(_workspaceId)).OrderBy(c => c.Name).ToList();
             _togglProjects = (await togglClient.GetProjectsAsync(_workspaceId)).OrderBy(p => p.Name).ToList();
-            PopulateTogglClientCheckList();
+            EnsureEntryMappingsFromToggl();
             RefreshMappingGridSources();
+            LoadMappingsIntoUi();
         }
         finally
         {
@@ -144,19 +150,6 @@ public partial class SyncForm : Form
             {
                 togglClient.Dispose();
             }
-        }
-    }
-
-    private void PopulateTogglClientCheckList()
-    {
-        var userMappings = GetCurrentUserMappings();
-        TogglClientsCheckedListBox.Items.Clear();
-
-        foreach (var client in _togglClients)
-        {
-            var existing = userMappings.SelectedClients.FirstOrDefault(c => c.ClientId == client.Id);
-            var isChecked = existing?.IsSelected ?? false;
-            TogglClientsCheckedListBox.Items.Add(client, isChecked);
         }
     }
 
@@ -170,6 +163,128 @@ public partial class SyncForm : Form
         return _configService.GetOrCreateUserMappings(_mappingsFile, _togglUserId);
     }
 
+    /// <summary>
+    /// One-time: convert legacy SelectedClients checkboxes into Active/Ignore status,
+    /// then ensure every live Toggl client+project has a mapping row.
+    /// </summary>
+    private void EnsureEntryMappingsFromToggl()
+    {
+        var userMappings = GetCurrentUserMappings();
+        MigrateSelectedClientsToStatus(userMappings);
+
+        var existingByKey = userMappings.EntryMappings
+            .ToDictionary(MappingKey, StringComparer.OrdinalIgnoreCase);
+
+        var next = new List<EntryMapping>();
+
+        // Preserve client-level Ignore rows first.
+        foreach (var mapping in userMappings.EntryMappings.Where(m => m.IsClientLevelIgnore))
+        {
+            next.Add(mapping);
+        }
+
+        var ignoredClientIds = next
+            .Where(m => m.TogglClientId > 0)
+            .Select(m => m.TogglClientId)
+            .ToHashSet();
+        var ignoredClientNames = next
+            .Select(m => m.TogglClientName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var client in _togglClients)
+        {
+            if (ignoredClientIds.Contains(client.Id) || ignoredClientNames.Contains(client.Name))
+            {
+                continue;
+            }
+
+            var projects = _togglProjects.Where(p => p.ClientId == client.Id).ToList();
+            foreach (var project in projects)
+            {
+                var key = MappingKey(client.Id, client.Name, project.Id, project.Name);
+                if (existingByKey.TryGetValue(key, out var existing))
+                {
+                    existing.TogglClientId = client.Id;
+                    existing.TogglClientName = client.Name;
+                    existing.TogglProjectId = project.Id;
+                    existing.TogglProjectName = project.Name;
+                    next.Add(existing);
+                }
+                else
+                {
+                    next.Add(new EntryMapping
+                    {
+                        Status = EntryMappingStatus.New,
+                        TogglClientId = client.Id,
+                        TogglClientName = client.Name,
+                        TogglProjectId = project.Id,
+                        TogglProjectName = project.Name
+                    });
+                }
+            }
+        }
+
+        // Keep orphan rows (removed from Toggl) so the user can Ignore/delete them explicitly.
+        var keptKeys = next.Select(MappingKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var orphan in userMappings.EntryMappings)
+        {
+            var key = MappingKey(orphan);
+            if (keptKeys.Contains(key) || orphan.IsClientLevelIgnore)
+            {
+                continue;
+            }
+
+            next.Add(orphan);
+            keptKeys.Add(key);
+        }
+
+        userMappings.EntryMappings = next
+            .OrderBy(m => m.TogglClientName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(m => m.IsClientLevelIgnore ? string.Empty : m.TogglProjectName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static void MigrateSelectedClientsToStatus(UserMappings userMappings)
+    {
+        if (userMappings.SelectedClients.Count == 0)
+        {
+            return;
+        }
+
+        var selectedIds = userMappings.SelectedClients
+            .Where(c => c.IsSelected)
+            .Select(c => c.ClientId)
+            .ToHashSet();
+
+        foreach (var mapping in userMappings.EntryMappings)
+        {
+            if (mapping.Status != EntryMappingStatus.Active)
+            {
+                continue;
+            }
+
+            if (selectedIds.Count > 0 && !selectedIds.Contains(mapping.TogglClientId))
+            {
+                mapping.Status = EntryMappingStatus.Ignore;
+            }
+        }
+
+        userMappings.SelectedClients = [];
+    }
+
+    private static string MappingKey(EntryMapping mapping) =>
+        MappingKey(mapping.TogglClientId, mapping.TogglClientName, mapping.TogglProjectId, mapping.TogglProjectName);
+
+    private static string MappingKey(long clientId, string clientName, long projectId, string projectName)
+    {
+        var clientPart = clientId > 0 ? $"id:{clientId}" : $"name:{clientName}";
+        var projectPart = projectId > 0
+            ? $"id:{projectId}"
+            : string.IsNullOrWhiteSpace(projectName) ? "project:" : $"name:{projectName}";
+        return $"{clientPart}|{projectPart}";
+    }
+
     private void LoadMappingsIntoUi()
     {
         var userMappings = GetCurrentUserMappings();
@@ -177,11 +292,12 @@ public partial class SyncForm : Form
         foreach (var mapping in userMappings.EntryMappings)
         {
             MappingGrid.Rows.Add(
+                mapping.Status.ToString(),
                 mapping.TogglClientName,
-                mapping.TogglProjectName,
-                mapping.SpesnetProjectId,
-                mapping.SpesnetClientId,
-                mapping.SpesnetWorkTaskId);
+                string.IsNullOrWhiteSpace(mapping.TogglProjectName) ? string.Empty : mapping.TogglProjectName,
+                mapping.SpesnetProjectId > 0 ? mapping.SpesnetProjectId : DBNull.Value,
+                mapping.SpesnetClientId > 0 ? mapping.SpesnetClientId : DBNull.Value,
+                mapping.SpesnetWorkTaskId > 0 ? mapping.SpesnetWorkTaskId : DBNull.Value);
             MappingGrid.Rows[^1].Tag = mapping;
         }
 
@@ -191,19 +307,9 @@ public partial class SyncForm : Form
     private void SaveMappingsFromUi()
     {
         var userMappings = GetCurrentUserMappings();
-
         userMappings.SelectedClients = [];
-        foreach (TogglClient client in TogglClientsCheckedListBox.CheckedItems)
-        {
-            userMappings.SelectedClients.Add(new SelectedTogglClient
-            {
-                ClientId = client.Id,
-                ClientName = client.Name,
-                IsSelected = true
-            });
-        }
-
         userMappings.EntryMappings = [];
+
         foreach (DataGridViewRow row in MappingGrid.Rows)
         {
             if (row.IsNewRow)
@@ -211,38 +317,85 @@ public partial class SyncForm : Form
                 continue;
             }
 
+            var status = ParseStatus(row.Cells[StatusColumn.Index].Value);
             var togglClientName = Convert.ToString(row.Cells[TogglClientColumn.Index].Value) ?? string.Empty;
             var togglProjectName = Convert.ToString(row.Cells[TogglProjectColumn.Index].Value) ?? string.Empty;
-            var togglClient = _togglClients.FirstOrDefault(c =>
-                string.Equals(c.Name, togglClientName, StringComparison.OrdinalIgnoreCase));
-            var togglProject = _togglProjects.FirstOrDefault(p =>
-                string.Equals(p.Name, togglProjectName, StringComparison.OrdinalIgnoreCase));
-            var projectId = GetSelectedId(row.Cells[SpesnetProjectColumn.Index].Value);
-            var clientId = GetSelectedId(row.Cells[SpesnetClientColumn.Index].Value);
-            var workTaskId = GetSelectedId(row.Cells[SpesnetWorkTaskColumn.Index].Value);
-            if (string.IsNullOrWhiteSpace(togglClientName) ||
-                string.IsNullOrWhiteSpace(togglProjectName) ||
-                projectId == 0 ||
-                clientId == 0 ||
-                workTaskId == 0)
+            if (string.IsNullOrWhiteSpace(togglClientName))
             {
                 continue;
             }
 
+            var isClientLevelIgnore = status == EntryMappingStatus.Ignore &&
+                                      string.IsNullOrWhiteSpace(togglProjectName);
+            if (!isClientLevelIgnore && string.IsNullOrWhiteSpace(togglProjectName))
+            {
+                // Incomplete non-ignore rows are dropped; New client+project rows are auto-populated.
+                continue;
+            }
+
+            var togglClient = _togglClients.FirstOrDefault(c =>
+                string.Equals(c.Name, togglClientName, StringComparison.OrdinalIgnoreCase));
+            var togglProject = isClientLevelIgnore
+                ? null
+                : _togglProjects.FirstOrDefault(p =>
+                    string.Equals(p.Name, togglProjectName, StringComparison.OrdinalIgnoreCase) &&
+                    (togglClient == null || p.ClientId == togglClient.Id));
+
+            var projectId = GetSelectedId(row.Cells[SpesnetProjectColumn.Index].Value);
+            var clientId = GetSelectedId(row.Cells[SpesnetClientColumn.Index].Value);
+            var workTaskId = GetSelectedId(row.Cells[SpesnetWorkTaskColumn.Index].Value);
+
             userMappings.EntryMappings.Add(new EntryMapping
             {
+                Status = status,
                 TogglClientId = togglClient?.Id ?? 0,
                 TogglClientName = togglClientName,
                 TogglProjectId = togglProject?.Id ?? 0,
-                TogglProjectName = togglProjectName,
+                TogglProjectName = isClientLevelIgnore ? string.Empty : togglProjectName,
                 SpesnetProjectId = projectId,
-                SpesnetProjectName = GetProjectName(projectId),
+                SpesnetProjectName = projectId > 0 ? GetProjectName(projectId) : string.Empty,
                 SpesnetClientId = clientId,
-                SpesnetClientName = GetClientName(projectId, clientId),
+                SpesnetClientName = projectId > 0 && clientId > 0 ? GetClientName(projectId, clientId) : string.Empty,
                 SpesnetWorkTaskId = workTaskId,
-                SpesnetWorkTaskName = GetWorkTaskName(workTaskId)
+                SpesnetWorkTaskName = workTaskId > 0 ? GetWorkTaskName(workTaskId) : string.Empty
             });
         }
+
+        // If a client-level Ignore exists, drop project-specific rows for that client.
+        var ignoredClientIds = userMappings.EntryMappings
+            .Where(m => m.IsClientLevelIgnore && m.TogglClientId > 0)
+            .Select(m => m.TogglClientId)
+            .ToHashSet();
+        var ignoredClientNames = userMappings.EntryMappings
+            .Where(m => m.IsClientLevelIgnore)
+            .Select(m => m.TogglClientName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (ignoredClientIds.Count > 0 || ignoredClientNames.Count > 0)
+        {
+            userMappings.EntryMappings = userMappings.EntryMappings
+                .Where(m =>
+                    m.IsClientLevelIgnore ||
+                    (!ignoredClientIds.Contains(m.TogglClientId) &&
+                     !ignoredClientNames.Contains(m.TogglClientName)))
+                .ToList();
+        }
+
+        if (_togglClients.Count > 0)
+        {
+            EnsureEntryMappingsFromToggl();
+        }
+    }
+
+    private static EntryMappingStatus ParseStatus(object? value)
+    {
+        var text = Convert.ToString(value);
+        if (Enum.TryParse<EntryMappingStatus>(text, ignoreCase: true, out var status))
+        {
+            return status;
+        }
+
+        return EntryMappingStatus.New;
     }
 
     private void RefreshMappingGridSources()
@@ -257,6 +410,7 @@ public partial class SyncForm : Form
             .OrderBy(w => w.Name)
             .ToArray();
 
+        SetComboColumnDataSource(StatusColumn, StatusDisplayValues);
         SetComboColumnDataSource(TogglClientColumn, togglClientNames);
         SetComboColumnDataSource(SpesnetProjectColumn, projectItems);
         SetComboColumnDataSource(SpesnetWorkTaskColumn, workTaskItems);
@@ -285,15 +439,32 @@ public partial class SyncForm : Form
     private void InitializeMappingGrids()
     {
         MappingGrid.AutoGenerateColumns = false;
+        MappingGrid.Columns.Add(StatusColumn);
         MappingGrid.Columns.Add(TogglClientColumn);
         MappingGrid.Columns.Add(TogglProjectColumn);
         MappingGrid.Columns.Add(SpesnetProjectColumn);
         MappingGrid.Columns.Add(SpesnetClientColumn);
         MappingGrid.Columns.Add(SpesnetWorkTaskColumn);
 
+        StatusColumn.DataSource = StatusDisplayValues;
+
         MappingGrid.EditingControlShowing += MappingGrid_EditingControlShowing;
         MappingGrid.CellValueChanged += MappingGrid_CellValueChanged;
         MappingGrid.CurrentCellDirtyStateChanged += MappingGrid_CurrentCellDirtyStateChanged;
+        MappingGrid.DataError += MappingGrid_DataError;
+        MappingGrid.DefaultValuesNeeded += MappingGrid_DefaultValuesNeeded;
+    }
+
+    private static void MappingGrid_DefaultValuesNeeded(object? sender, DataGridViewRowEventArgs e)
+    {
+        e.Row.Cells["StatusColumn"].Value = nameof(EntryMappingStatus.New);
+    }
+
+    private static void MappingGrid_DataError(object? sender, DataGridViewDataErrorEventArgs e)
+    {
+        // Combo cells briefly hold values that aren't in the filtered Items list while
+        // per-row DataSources are swapped; suppress the default error dialog.
+        e.ThrowException = false;
     }
 
     private void MappingGrid_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
@@ -321,10 +492,33 @@ public partial class SyncForm : Form
         else if (MappingGrid.CurrentCell?.OwningColumn == TogglProjectColumn && MappingGrid.CurrentRow != null)
         {
             UpdateTogglProjectComboForRow(MappingGrid.CurrentRow);
+            SyncEditingComboWithCell(comboBox, (DataGridViewComboBoxCell)MappingGrid.CurrentCell);
         }
         else if (MappingGrid.CurrentCell?.OwningColumn == SpesnetProjectColumn)
         {
             comboBox.SelectedIndexChanged += SpesnetProjectCombo_SelectedIndexChanged;
+        }
+        else if (MappingGrid.CurrentCell?.OwningColumn == SpesnetClientColumn && MappingGrid.CurrentRow != null)
+        {
+            UpdateSpesnetClientComboForRow(MappingGrid.CurrentRow);
+            SyncEditingComboWithCell(comboBox, (DataGridViewComboBoxCell)MappingGrid.CurrentCell);
+        }
+    }
+
+    private static void SyncEditingComboWithCell(ComboBox editingCombo, DataGridViewComboBoxCell cell)
+    {
+        editingCombo.DataSource = null;
+        editingCombo.DisplayMember = cell.DisplayMember;
+        editingCombo.ValueMember = cell.ValueMember;
+        editingCombo.DataSource = cell.DataSource;
+
+        if (!string.IsNullOrEmpty(cell.ValueMember))
+        {
+            editingCombo.SelectedValue = cell.Value!;
+        }
+        else
+        {
+            editingCombo.SelectedItem = cell.Value;
         }
     }
 
@@ -371,31 +565,27 @@ public partial class SyncForm : Form
         var togglClient = _togglClients.FirstOrDefault(c =>
             string.Equals(c.Name, togglClientName, StringComparison.OrdinalIgnoreCase));
 
+        // Leading empty option allows client-level Ignore (no project).
         var projectNames = togglClient == null
-            ? Array.Empty<string>()
-            : _togglProjects
-                .Where(p => p.ClientId == togglClient.Id)
-                .Select(p => p.Name)
-                .Distinct()
-                .OrderBy(n => n)
+            ? [string.Empty]
+            : new[] { string.Empty }
+                .Concat(_togglProjects
+                    .Where(p => p.ClientId == togglClient.Id)
+                    .Select(p => p.Name)
+                    .Distinct()
+                    .OrderBy(n => n))
                 .ToArray();
 
         var projectCell = (DataGridViewComboBoxCell)row.Cells[TogglProjectColumn.Index];
+        var current = Convert.ToString(projectCell.Value) ?? string.Empty;
+
+        projectCell.Value = null;
         projectCell.DataSource = null;
         projectCell.DataSource = projectNames;
 
-        if (projectNames.Length == 0)
-        {
-            projectCell.Value = null;
-            return;
-        }
-
-        var current = Convert.ToString(projectCell.Value);
-        if (string.IsNullOrEmpty(current) ||
-            !projectNames.Contains(current, StringComparer.OrdinalIgnoreCase))
-        {
-            projectCell.Value = projectNames[0];
-        }
+        var match = projectNames.FirstOrDefault(n =>
+            string.Equals(n, current, StringComparison.OrdinalIgnoreCase));
+        projectCell.Value = match ?? string.Empty;
     }
 
     private void UpdateSpesnetClientComboForRow(DataGridViewRow row)
@@ -406,21 +596,21 @@ public partial class SyncForm : Form
             : Array.Empty<ComboItem>();
 
         var clientCell = (DataGridViewComboBoxCell)row.Cells[SpesnetClientColumn.Index];
-        clientCell.DataSource = clients;
+        var currentId = GetSelectedId(clientCell.Value);
+
+        clientCell.Value = null;
+        clientCell.DataSource = null;
         clientCell.DisplayMember = nameof(ComboItem.Name);
         clientCell.ValueMember = nameof(ComboItem.Id);
+        clientCell.DataSource = clients;
 
         if (clients.Length == 0)
         {
-            clientCell.Value = null;
             return;
         }
 
-        var currentId = GetSelectedId(clientCell.Value);
-        if (clients.All(c => c.Id != currentId))
-        {
-            clientCell.Value = clients[0].Id;
-        }
+        var match = clients.FirstOrDefault(c => c.Id == currentId);
+        clientCell.Value = match?.Id ?? (object?)null;
     }
 
     private async void RefreshTogglButton_Click(object sender, EventArgs e)
@@ -428,8 +618,9 @@ public partial class SyncForm : Form
         try
         {
             SetUiEnabled(false);
+            SaveMappingsFromUi();
             await RefreshTogglClientsAsync();
-            _logger.Info("Toggl clients and projects refreshed.");
+            _logger.Info("Toggl clients and projects refreshed; mapping rows updated.");
         }
         catch (Exception ex)
         {
@@ -502,9 +693,16 @@ public partial class SyncForm : Form
             return;
         }
 
-        if (TogglClientsCheckedListBox.CheckedItems.Count == 0)
+        var unresolved = SyncService.FindUnresolvedMappings(GetCurrentUserMappings());
+        if (unresolved.Count > 0)
         {
-            MessageBox.Show(this, "Select at least one Toggl client to sync on the Toggl Clients tab.", "No Clients Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                this,
+                $"Resolve {unresolved.Count} mapping(s) still set to New before syncing. Set each to Active (with Spesnet fields) or Ignore. " +
+                "A client-only row with Status=Ignore covers every project for that client.",
+                "Unresolved Mappings",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 

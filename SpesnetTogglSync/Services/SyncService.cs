@@ -36,6 +36,16 @@ public class SyncService
         _logger.Info($"Sync started from watermark {watermarkUtc:u}");
         Report("Fetching Toggl time entries...");
 
+        var unresolved = FindUnresolvedMappings(mappings);
+        if (unresolved.Count > 0)
+        {
+            var sample = string.Join("; ", unresolved.Take(5).Select(FormatMappingLabel));
+            var more = unresolved.Count > 5 ? $" (+{unresolved.Count - 5} more)" : string.Empty;
+            return Fail(
+                $"Resolve mapping status for {unresolved.Count} row(s) still set to New before syncing: {sample}{more}. " +
+                "Set each to Active (with Spesnet mappings) or Ignore.");
+        }
+
         var entries = await _togglClient.GetTimeEntriesSinceAsync(watermarkUtc, cancellationToken);
         _logger.Info($"Fetched {entries.Count} Toggl entries after watermark");
 
@@ -47,16 +57,6 @@ public class SyncService
                 Message = "No new time entries to sync.",
                 LastSyncedStartTime = watermarkUtc
             };
-        }
-
-        var selectedClientIds = mappings.SelectedClients
-            .Where(c => c.IsSelected)
-            .Select(c => c.ClientId)
-            .ToHashSet();
-
-        if (selectedClientIds.Count == 0)
-        {
-            return Fail("No Toggl clients are selected for sync. Check at least one client on the Toggl Clients tab.");
         }
 
         var candidateEntries = new List<TogglTimeEntry>();
@@ -85,11 +85,38 @@ public class SyncService
                 return Fail(message);
             }
 
-            if (!selectedClientIds.Contains(entry.ClientId.Value))
+            if (HasClientLevelIgnore(mappings, entry))
             {
-                _logger.Info($"Skipping entry {entry.Id} for unselected client '{entry.ClientName}'");
+                _logger.Info($"Skipping entry {entry.Id} for ignored client '{entry.ClientName}'");
                 skippedCount++;
                 continue;
+            }
+
+            var mapping = FindEntryMapping(mappings, entry);
+            if (mapping == null)
+            {
+                var message =
+                    $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}'. " +
+                    "Refresh from Toggl on the Mapping tab so the row appears, then set Active or Ignore.";
+                _logger.Error(message);
+                return Fail(message);
+            }
+
+            if (mapping.Status == EntryMappingStatus.Ignore)
+            {
+                _logger.Info(
+                    $"Skipping entry {entry.Id} for ignored mapping '{entry.ClientName}' / '{entry.ProjectName}'");
+                skippedCount++;
+                continue;
+            }
+
+            if (mapping.Status == EntryMappingStatus.New)
+            {
+                var message =
+                    $"Mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' is still New. " +
+                    "Set it to Active or Ignore before syncing.";
+                _logger.Error(message);
+                return Fail(message);
             }
 
             candidateEntries.Add(entry);
@@ -156,6 +183,33 @@ public class SyncService
         };
     }
 
+    /// <summary>
+    /// Rows still marked New block sync until explicitly set to Active or Ignore.
+    /// Client-level Ignore covers every project for that client, so New project rows under
+    /// an ignored client are not required and do not block.
+    /// </summary>
+    public static IReadOnlyList<EntryMapping> FindUnresolvedMappings(UserMappings mappings)
+    {
+        var ignoredClientIds = mappings.EntryMappings
+            .Where(m => m.IsClientLevelIgnore)
+            .Select(m => m.TogglClientId)
+            .Where(id => id > 0)
+            .ToHashSet();
+
+        var ignoredClientNames = mappings.EntryMappings
+            .Where(m => m.IsClientLevelIgnore)
+            .Select(m => m.TogglClientName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return mappings.EntryMappings
+            .Where(m => m.Status == EntryMappingStatus.New)
+            .Where(m =>
+                !ignoredClientIds.Contains(m.TogglClientId) &&
+                !ignoredClientNames.Contains(m.TogglClientName))
+            .ToList();
+    }
+
     private static string? ValidateMappings(
         IReadOnlyList<TogglTimeEntry> entries,
         UserMappings mappings,
@@ -167,6 +221,11 @@ public class SyncService
             if (mapping == null)
             {
                 return $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}'. Configure it on the Mapping tab.";
+            }
+
+            if (!mapping.HasSpesnetDestination)
+            {
+                return $"Active mapping for '{entry.ClientName}' / '{entry.ProjectName}' is missing Spesnet project, client, or work task.";
             }
 
             if (!referenceCache.Projects.Any(p => p.Id == mapping.SpesnetProjectId))
@@ -189,10 +248,15 @@ public class SyncService
         return null;
     }
 
+    private static bool HasClientLevelIgnore(UserMappings mappings, TogglTimeEntry entry) =>
+        mappings.EntryMappings.Any(m => m.IsClientLevelIgnore && MatchesTogglClient(m, entry));
+
     private static EntryMapping? FindEntryMapping(UserMappings mappings, TogglTimeEntry entry)
     {
         return mappings.EntryMappings.FirstOrDefault(m =>
-            MatchesTogglClient(m, entry) && MatchesTogglProject(m, entry));
+            !m.IsClientLevelIgnore &&
+            MatchesTogglClient(m, entry) &&
+            MatchesTogglProject(m, entry));
     }
 
     private static bool MatchesTogglClient(EntryMapping mapping, TogglTimeEntry entry) =>
@@ -202,6 +266,16 @@ public class SyncService
     private static bool MatchesTogglProject(EntryMapping mapping, TogglTimeEntry entry) =>
         mapping.TogglProjectId == entry.ProjectId!.Value ||
         string.Equals(mapping.TogglProjectName, entry.ProjectName, StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatMappingLabel(EntryMapping mapping)
+    {
+        if (string.IsNullOrWhiteSpace(mapping.TogglProjectName))
+        {
+            return $"'{mapping.TogglClientName}' (client-level)";
+        }
+
+        return $"'{mapping.TogglClientName}' / '{mapping.TogglProjectName}'";
+    }
 
     private static List<SpesnetWorkDoneEntry> TransformEntry(
         TogglTimeEntry entry,
