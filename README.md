@@ -13,7 +13,7 @@ dotnet run --project SpesnetTogglSync\SpesnetTogglSync.csproj
 ```
 
 1. **Settings** — paste your Toggl API token (profile → API token). Keep **Use mock Spesnet** checked for local testing.
-2. **Mapping** — Refresh from Toggl to populate one row per client+project. Set **Status** to Active (fill Spesnet fields) or Ignore. Leave nothing on New.
+2. **Mapping** — Refresh from Toggl / Spesnet as needed. Set each row’s **Status** to Active (fill Spesnet fields) or Ignore. Click **Save Mappings** (unsaved edits show an amber label and a `*` in the title).
 3. Set **Sync from**, click **Start Sync**. Watch **Sync Log**.
 
 Production: uncheck mock mode, enter Spesnet credentials, click **Refresh Spesnet Reference Data**, then sync.
@@ -35,6 +35,14 @@ One **entry mapping** row defines status plus the destination for a Toggl client
 
 ## Runtime files (gitignored)
 
+Optional bootstrap next to the exe:
+
+| File | Role |
+|------|------|
+| `config-location.json` | Points `dataDirectory` at where the files below live (e.g. OneDrive). If missing, they stay next to the exe. |
+
+Data files (in `dataDirectory`, or next to the exe when no pointer):
+
 | File | Role |
 |------|------|
 | `appsettings.json` | Credentials, domain, `UseMockSpesnet`, cached Spesnet reference |
@@ -42,7 +50,7 @@ One **entry mapping** row defines status plus the destination for a Toggl client
 | `mappings.json` | Per–Toggl-user selections and mappings |
 | `logs/sync-YYYYMMDD.log` | Audit / debug trail |
 
-Template: `appsettings.example.json`.
+Templates: `appsettings.example.json`, `config-location.example.json`.
 
 ## Architecture (high level)
 
@@ -66,12 +74,12 @@ SpesnetTogglSync.slnx
 │   ├── SyncForm*.cs
 │   ├── Services/
 │   ├── Data/                         # Mock Spesnet reference data
-│   └── appsettings.example.json
+│   ├── appsettings.example.json
+│   └── config-location.example.json  # Bootstrap pointer to data directory
 ├── SpesnetTogglSync.Shared/          # Models + IApiLogger
 ├── SpesnetTogglSync.TogglApi/        # Toggl Track library (central TogglApiHttp)
 └── SpesnetTogglSync.SpesnetApi/      # Spesnet library (central SpesnetApiHttp + mock)
 ```
-
 ## Auth notes
 
 - **Toggl**: API token as Basic Auth username, password literal `api_token`.

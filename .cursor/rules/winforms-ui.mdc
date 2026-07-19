@@ -10,15 +10,17 @@ alwaysApply: false
 
 - Top bar: watermark DateTimePicker, Start Sync, mock checkbox, status.
 - Tabs: Sync Log, Mapping, Settings.
+- Mapping toolbar: Save Mappings, dirty label, Refresh Spesnet Reference Data, Refresh from Toggl.
 - Prefer editing `SyncForm.Designer.cs` for control layout; keep async/event wiring in `SyncForm.cs`.
 
 ## Mapping grid
 
 - One grid: Status → Toggl client → Toggl project (filtered by client; empty allowed) → Spesnet project → Spesnet client → Spesnet work task.
-- Auto-populate one row per live Toggl client+project on Refresh from Toggl; new pairs start as `New`.
+- Status cell colors: Active=green, Ignore=blue, New=amber (painted on the closed combo cell via CellPainting).
+- Auto-populate one row per live Toggl client+project on Refresh from Toggl; new pairs start as `New` and mark mappings dirty until Save.
 - Client-only row (empty project) with Status=`Ignore` covers all projects for that client.
 - Reload Toggl projects when the Toggl client combo changes; reload Spesnet clients when the Spesnet project combo changes.
-- Persist mappings on close and before sync via `SaveMappingsFromUi`.
+- Persist mappings only via **Save Mappings** (explicit). Warn on close if dirty; block Start Sync while dirty.
 
 ## Behaviour
 

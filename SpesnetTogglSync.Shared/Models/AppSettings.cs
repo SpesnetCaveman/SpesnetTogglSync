@@ -7,7 +7,6 @@ public class AppSettings
     public string SpesnetUsername { get; set; } = string.Empty;
     public string SpesnetPassword { get; set; } = string.Empty;
     public string SpesnetDomain { get; set; } = "https://gateway_internal.evolvemed.co.za/api-evolveTimekeepingAPI/";
-    public string AspNetUserId { get; set; } = string.Empty;
     public bool UseMockSpesnet { get; set; } = true;
     public SpesnetReferenceCache? SpesnetReferenceCache { get; set; }
 }

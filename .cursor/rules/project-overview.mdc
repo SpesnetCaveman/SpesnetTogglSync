@@ -9,7 +9,7 @@ WinForms (.NET 10) app that syncs **Toggl Track** → **Spesnet/EvolveMed Timeke
 
 ## Flow
 
-`SyncForm` → `SyncService` → `SpesnetTogglSync.TogglApi` + `SpesnetTogglSync.SpesnetApi` (mock or real). Shared models in `SpesnetTogglSync.Shared`. State in `appsettings.json`, `syncstate.json`, `mappings.json`; logs under `logs/`. Central failure breakpoints: `TogglApiHttp.CreateFailure` / `SpesnetApiHttp.CreateFailure`.
+`SyncForm` → `SyncService` → `SpesnetTogglSync.TogglApi` + `SpesnetTogglSync.SpesnetApi` (mock or real). Shared models in `SpesnetTogglSync.Shared`. Optional `config-location.json` next to the exe points at a data directory for `appsettings.json`, `syncstate.json`, `mappings.json`, and `logs/`. Central failure breakpoints: `TogglApiHttp.CreateFailure` / `SpesnetApiHttp.CreateFailure`.
 
 ## Mapping (required)
 

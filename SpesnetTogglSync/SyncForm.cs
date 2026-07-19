@@ -14,8 +14,12 @@ public partial class SyncForm : Form
         nameof(EntryMappingStatus.New)
     ];
 
-    private readonly ConfigService _configService = new();
-    private readonly FileLogger _logger = new();
+    private static readonly Color StatusActiveBackColor = Color.FromArgb(198, 239, 206);
+    private static readonly Color StatusIgnoreBackColor = Color.FromArgb(189, 215, 238);
+    private static readonly Color StatusNewBackColor = Color.FromArgb(255, 223, 128);
+
+    private readonly ConfigService _configService;
+    private readonly FileLogger _logger;
     private AppSettings _settings = new();
     private SyncState _syncState = new();
     private MappingsFile _mappingsFile = new();
@@ -25,11 +29,18 @@ public partial class SyncForm : Form
     private List<TogglClient> _togglClients = [];
     private List<TogglProject> _togglProjects = [];
     private CancellationTokenSource? _syncCancellation;
+    private bool _mappingsDirty;
+    private bool _suppressMappingDirty;
 
     public SyncForm()
     {
+        var dataDirectory = ConfigService.ResolveDataDirectory();
+        _configService = new ConfigService(dataDirectory);
+        _logger = new FileLogger(dataDirectory);
+
         InitializeComponent();
         InitializeMappingGrids();
+        UpdateMappingDirtyUi();
         _logger.LogWritten += (_, line) => AppendLogLine(line);
     }
 
@@ -48,9 +59,18 @@ public partial class SyncForm : Form
         StartSyncDateTimeControl.Value = watermark;
 
         LogTextBox.Text = _logger.ReadTodayLog();
+        if (!string.Equals(
+                _configService.DataDirectory,
+                _configService.InstallDirectory,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.Info($"Using data directory: {_configService.DataDirectory}");
+        }
+
         await InitializeTogglContextAsync();
         await EnsureReferenceDataLoadedAsync();
         LoadMappingsIntoUi();
+        UpdateMappingDirtyUi();
     }
 
     private async Task EnsureReferenceDataLoadedAsync()
@@ -76,8 +96,28 @@ public partial class SyncForm : Form
 
     private void SyncForm_FormClosing(object sender, FormClosingEventArgs e)
     {
-        SaveMappingsFromUi();
-        _configService.SaveMappings(_mappingsFile);
+        if (_mappingsDirty)
+        {
+            var result = MessageBox.Show(
+                this,
+                "You have unsaved mapping changes. Save them before closing?",
+                "Unsaved Mappings",
+                MessageBoxButtons.YesNoCancel,
+                MessageBoxIcon.Warning);
+
+            if (result == DialogResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            if (result == DialogResult.Yes && !TrySaveMappingsToDisk())
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         _syncState.LastSyncedStartTime = StartSyncDateTimeControl.Value.ToUniversalTime();
         _configService.SaveSyncState(_syncState);
     }
@@ -140,9 +180,12 @@ public partial class SyncForm : Form
         {
             _togglClients = (await togglClient.GetClientsAsync(_workspaceId)).OrderBy(c => c.Name).ToList();
             _togglProjects = (await togglClient.GetProjectsAsync(_workspaceId)).OrderBy(p => p.Name).ToList();
-            EnsureEntryMappingsFromToggl();
-            RefreshMappingGridSources();
+            var added = EnsureEntryMappingsFromToggl();
             LoadMappingsIntoUi();
+            if (added > 0)
+            {
+                MarkMappingsDirty();
+            }
         }
         finally
         {
@@ -166,16 +209,19 @@ public partial class SyncForm : Form
     /// <summary>
     /// One-time: convert legacy SelectedClients checkboxes into Active/Ignore status,
     /// then ensure every live Toggl client+project has a mapping row.
+    /// Returns how many brand-new New rows were added.
     /// </summary>
-    private void EnsureEntryMappingsFromToggl()
+    private int EnsureEntryMappingsFromToggl()
     {
         var userMappings = GetCurrentUserMappings();
         MigrateSelectedClientsToStatus(userMappings);
 
         var existingByKey = userMappings.EntryMappings
-            .ToDictionary(MappingKey, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(MappingKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         var next = new List<EntryMapping>();
+        var addedCount = 0;
 
         // Preserve client-level Ignore rows first.
         foreach (var mapping in userMappings.EntryMappings.Where(m => m.IsClientLevelIgnore))
@@ -221,6 +267,7 @@ public partial class SyncForm : Form
                         TogglProjectId = project.Id,
                         TogglProjectName = project.Name
                     });
+                    addedCount++;
                 }
             }
         }
@@ -243,6 +290,8 @@ public partial class SyncForm : Form
             .OrderBy(m => m.TogglClientName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(m => m.IsClientLevelIgnore ? string.Empty : m.TogglProjectName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        return addedCount;
     }
 
     private static void MigrateSelectedClientsToStatus(UserMappings userMappings)
@@ -288,23 +337,34 @@ public partial class SyncForm : Form
     private void LoadMappingsIntoUi()
     {
         var userMappings = GetCurrentUserMappings();
-        MappingGrid.Rows.Clear();
-        foreach (var mapping in userMappings.EntryMappings)
+        _suppressMappingDirty = true;
+        try
         {
-            MappingGrid.Rows.Add(
-                mapping.Status.ToString(),
-                mapping.TogglClientName,
-                string.IsNullOrWhiteSpace(mapping.TogglProjectName) ? string.Empty : mapping.TogglProjectName,
-                mapping.SpesnetProjectId > 0 ? mapping.SpesnetProjectId : DBNull.Value,
-                mapping.SpesnetClientId > 0 ? mapping.SpesnetClientId : DBNull.Value,
-                mapping.SpesnetWorkTaskId > 0 ? mapping.SpesnetWorkTaskId : DBNull.Value);
-            MappingGrid.Rows[^1].Tag = mapping;
-        }
+            MappingGrid.Rows.Clear();
+            foreach (var mapping in userMappings.EntryMappings)
+            {
+                MappingGrid.Rows.Add(
+                    mapping.Status.ToString(),
+                    mapping.TogglClientName,
+                    string.IsNullOrWhiteSpace(mapping.TogglProjectName) ? string.Empty : mapping.TogglProjectName,
+                    mapping.SpesnetProjectId > 0 ? mapping.SpesnetProjectId : DBNull.Value,
+                    mapping.SpesnetClientId > 0 ? mapping.SpesnetClientId : DBNull.Value,
+                    mapping.SpesnetWorkTaskId > 0 ? mapping.SpesnetWorkTaskId : DBNull.Value);
+                MappingGrid.Rows[^1].Tag = mapping;
+            }
 
-        RefreshMappingGridSources();
+            RefreshMappingGridSources();
+        }
+        finally
+        {
+            _suppressMappingDirty = false;
+        }
     }
 
-    private void SaveMappingsFromUi()
+    /// <summary>
+    /// Reads the grid into in-memory mappings (does not write mappings.json).
+    /// </summary>
+    private void ApplyMappingsFromUi()
     {
         var userMappings = GetCurrentUserMappings();
         userMappings.SelectedClients = [];
@@ -387,6 +447,47 @@ public partial class SyncForm : Form
         }
     }
 
+    private bool TrySaveMappingsToDisk()
+    {
+        try
+        {
+            ApplyMappingsFromUi();
+            _configService.SaveMappings(_mappingsFile);
+            _mappingsDirty = false;
+            UpdateMappingDirtyUi();
+            LoadMappingsIntoUi();
+            _logger.Info("Mappings saved.");
+            StatusLabel.Text = "Mappings saved.";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex.Message);
+            MessageBox.Show(this, ex.Message, "Save Mappings Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return false;
+        }
+    }
+
+    private void MarkMappingsDirty()
+    {
+        if (_suppressMappingDirty)
+        {
+            return;
+        }
+
+        _mappingsDirty = true;
+        UpdateMappingDirtyUi();
+    }
+
+    private void UpdateMappingDirtyUi()
+    {
+        MappingDirtyLabel.Visible = _mappingsDirty;
+        SaveMappingsButton.Enabled = _mappingsDirty && StartSyncButton.Enabled;
+        Text = _mappingsDirty
+            ? "Toggl to Spesnet Sync *"
+            : "Toggl to Spesnet Sync";
+    }
+
     private static EntryMappingStatus ParseStatus(object? value)
     {
         var text = Convert.ToString(value);
@@ -447,13 +548,64 @@ public partial class SyncForm : Form
         MappingGrid.Columns.Add(SpesnetWorkTaskColumn);
 
         StatusColumn.DataSource = StatusDisplayValues;
+        // ComboBox cells ignore CellStyle.BackColor with the default FlatStyle;
+        // Flat + CellPainting keep the closed-cell status colour visible.
+        StatusColumn.FlatStyle = FlatStyle.Flat;
+        StatusColumn.DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton;
 
         MappingGrid.EditingControlShowing += MappingGrid_EditingControlShowing;
         MappingGrid.CellValueChanged += MappingGrid_CellValueChanged;
+        MappingGrid.CellPainting += MappingGrid_CellPainting;
         MappingGrid.CurrentCellDirtyStateChanged += MappingGrid_CurrentCellDirtyStateChanged;
         MappingGrid.DataError += MappingGrid_DataError;
         MappingGrid.DefaultValuesNeeded += MappingGrid_DefaultValuesNeeded;
+        MappingGrid.UserDeletedRow += (_, _) => MarkMappingsDirty();
+        MappingGrid.RowsAdded += MappingGrid_RowsAdded;
     }
+
+    private void MappingGrid_RowsAdded(object? sender, DataGridViewRowsAddedEventArgs e)
+    {
+        if (_suppressMappingDirty)
+        {
+            return;
+        }
+
+        MarkMappingsDirty();
+    }
+
+    private void MappingGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex != StatusColumn.Index)
+        {
+            return;
+        }
+
+        var cell = MappingGrid.Rows[e.RowIndex].Cells[e.ColumnIndex];
+        var status = ParseStatus(cell.Value ?? e.FormattedValue);
+        var backColor = GetStatusBackColor(status);
+
+        e.Handled = true;
+
+        using (var brush = new SolidBrush(backColor))
+        {
+            e.Graphics.FillRectangle(brush, e.CellBounds);
+        }
+
+        // Paint text, dropdown glyph and border on top of our fill (skip default/selection backgrounds).
+        e.Paint(
+            e.ClipBounds,
+            DataGridViewPaintParts.All
+            & ~DataGridViewPaintParts.Background
+            & ~DataGridViewPaintParts.SelectionBackground);
+    }
+
+    private static Color GetStatusBackColor(EntryMappingStatus status) =>
+        status switch
+        {
+            EntryMappingStatus.Active => StatusActiveBackColor,
+            EntryMappingStatus.Ignore => StatusIgnoreBackColor,
+            _ => StatusNewBackColor
+        };
 
     private static void MappingGrid_DefaultValuesNeeded(object? sender, DataGridViewRowEventArgs e)
     {
@@ -485,6 +637,18 @@ public partial class SyncForm : Form
         comboBox.SelectedIndexChanged -= TogglClientCombo_SelectedIndexChanged;
         comboBox.SelectedIndexChanged -= SpesnetProjectCombo_SelectedIndexChanged;
 
+        if (MappingGrid.CurrentCell?.OwningColumn == StatusColumn)
+        {
+            comboBox.BackColor = GetStatusBackColor(ParseStatus(MappingGrid.CurrentCell.Value));
+            comboBox.SelectedIndexChanged -= StatusCombo_SelectedIndexChanged;
+            comboBox.SelectedIndexChanged += StatusCombo_SelectedIndexChanged;
+        }
+        else
+        {
+            comboBox.BackColor = SystemColors.Window;
+            comboBox.SelectedIndexChanged -= StatusCombo_SelectedIndexChanged;
+        }
+
         if (MappingGrid.CurrentCell?.OwningColumn == TogglClientColumn)
         {
             comboBox.SelectedIndexChanged += TogglClientCombo_SelectedIndexChanged;
@@ -502,6 +666,14 @@ public partial class SyncForm : Form
         {
             UpdateSpesnetClientComboForRow(MappingGrid.CurrentRow);
             SyncEditingComboWithCell(comboBox, (DataGridViewComboBoxCell)MappingGrid.CurrentCell);
+        }
+    }
+
+    private void StatusCombo_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (sender is ComboBox comboBox)
+        {
+            comboBox.BackColor = GetStatusBackColor(ParseStatus(comboBox.SelectedItem));
         }
     }
 
@@ -557,6 +729,12 @@ public partial class SyncForm : Form
         {
             UpdateSpesnetClientComboForRow(MappingGrid.Rows[e.RowIndex]);
         }
+        else if (e.ColumnIndex == StatusColumn.Index)
+        {
+            MappingGrid.InvalidateCell(e.ColumnIndex, e.RowIndex);
+        }
+
+        MarkMappingsDirty();
     }
 
     private void UpdateTogglProjectComboForRow(DataGridViewRow row)
@@ -618,7 +796,7 @@ public partial class SyncForm : Form
         try
         {
             SetUiEnabled(false);
-            SaveMappingsFromUi();
+            ApplyMappingsFromUi();
             await RefreshTogglClientsAsync();
             _logger.Info("Toggl clients and projects refreshed; mapping rows updated.");
         }
@@ -629,6 +807,7 @@ public partial class SyncForm : Form
         finally
         {
             SetUiEnabled(true);
+            UpdateMappingDirtyUi();
         }
     }
 
@@ -654,7 +833,13 @@ public partial class SyncForm : Form
         finally
         {
             SetUiEnabled(true);
+            UpdateMappingDirtyUi();
         }
+    }
+
+    private void SaveMappingsButton_Click(object sender, EventArgs e)
+    {
+        TrySaveMappingsToDisk();
     }
 
     private void SaveSettingsButton_Click(object sender, EventArgs e)
@@ -677,9 +862,18 @@ public partial class SyncForm : Form
             return;
         }
 
+        if (_mappingsDirty)
+        {
+            MessageBox.Show(
+                this,
+                "You have unsaved mapping changes. Click Save Mappings on the Mapping tab before syncing.",
+                "Unsaved Mappings",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
         SaveSettingsFromUi();
-        SaveMappingsFromUi();
-        _configService.SaveMappings(_mappingsFile);
 
         if (string.IsNullOrWhiteSpace(_settings.TogglApiToken))
         {
@@ -710,6 +904,7 @@ public partial class SyncForm : Form
         try
         {
             SetUiEnabled(false);
+            mainTabControl.SelectedTab = logTabPage;
             StatusLabel.Text = "Sync in progress...";
 
             using var togglClient = CreateTogglClient();
@@ -794,6 +989,7 @@ public partial class SyncForm : Form
         RefreshTogglButton.Enabled = enabled;
         RefreshSpesnetButton.Enabled = enabled;
         SaveSettingsButton.Enabled = enabled;
+        SaveMappingsButton.Enabled = enabled && _mappingsDirty;
     }
 
     private static int GetSelectedId(object? value)

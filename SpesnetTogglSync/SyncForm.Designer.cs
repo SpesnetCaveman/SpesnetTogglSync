@@ -25,11 +25,13 @@
             logTabPage = new TabPage();
             LogTextBox = new TextBox();
             mappingTabPage = new TabPage();
+            SaveMappingsButton = new Button();
+            MappingDirtyLabel = new Label();
+            RefreshSpesnetButton = new Button();
             RefreshTogglButton = new Button();
             MappingGrid = new DataGridView();
             settingsTabPage = new TabPage();
             SaveSettingsButton = new Button();
-            RefreshSpesnetButton = new Button();
             SpesnetDomainTextBox = new TextBox();
             spesnetDomainLabel = new Label();
             SpesnetPasswordTextBox = new TextBox();
@@ -63,7 +65,7 @@
             topPanel.Location = new Point(0, 0);
             topPanel.Name = "topPanel";
             topPanel.Padding = new Padding(12);
-            topPanel.Size = new Size(984, 72);
+            topPanel.Size = new Size(1968, 72);
             topPanel.TabIndex = 0;
             // 
             // syncFromLabel
@@ -99,7 +101,7 @@
             StatusLabel.AutoEllipsis = true;
             StatusLabel.Location = new Point(15, 44);
             StatusLabel.Name = "StatusLabel";
-            StatusLabel.Size = new Size(700, 20);
+            StatusLabel.Size = new Size(1680, 20);
             StatusLabel.TabIndex = 3;
             StatusLabel.Text = "Ready";
             // 
@@ -125,7 +127,7 @@
             mainTabControl.Location = new Point(0, 72);
             mainTabControl.Name = "mainTabControl";
             mainTabControl.SelectedIndex = 0;
-            mainTabControl.Size = new Size(984, 489);
+            mainTabControl.Size = new Size(1968, 489);
             mainTabControl.TabIndex = 1;
             // 
             // logTabPage
@@ -134,7 +136,7 @@
             logTabPage.Location = new Point(4, 29);
             logTabPage.Name = "logTabPage";
             logTabPage.Padding = new Padding(8);
-            logTabPage.Size = new Size(976, 456);
+            logTabPage.Size = new Size(1960, 456);
             logTabPage.TabIndex = 0;
             logTabPage.Text = "Sync Log";
             logTabPage.UseVisualStyleBackColor = true;
@@ -147,28 +149,63 @@
             LogTextBox.Name = "LogTextBox";
             LogTextBox.ReadOnly = true;
             LogTextBox.ScrollBars = ScrollBars.Vertical;
-            LogTextBox.Size = new Size(960, 440);
+            LogTextBox.Size = new Size(1944, 440);
             LogTextBox.TabIndex = 0;
             // 
             // mappingTabPage
             // 
             mappingTabPage.Controls.Add(MappingGrid);
+            mappingTabPage.Controls.Add(SaveMappingsButton);
+            mappingTabPage.Controls.Add(MappingDirtyLabel);
+            mappingTabPage.Controls.Add(RefreshSpesnetButton);
             mappingTabPage.Controls.Add(RefreshTogglButton);
             mappingTabPage.Location = new Point(4, 29);
             mappingTabPage.Name = "mappingTabPage";
             mappingTabPage.Padding = new Padding(8);
-            mappingTabPage.Size = new Size(976, 456);
+            mappingTabPage.Size = new Size(1960, 456);
             mappingTabPage.TabIndex = 1;
             mappingTabPage.Text = "Mapping";
             mappingTabPage.UseVisualStyleBackColor = true;
             // 
+            // SaveMappingsButton
+            // 
+            SaveMappingsButton.Location = new Point(8, 8);
+            SaveMappingsButton.Name = "SaveMappingsButton";
+            SaveMappingsButton.Size = new Size(130, 29);
+            SaveMappingsButton.TabIndex = 0;
+            SaveMappingsButton.Text = "Save Mappings";
+            SaveMappingsButton.UseVisualStyleBackColor = true;
+            SaveMappingsButton.Click += SaveMappingsButton_Click;
+            // 
+            // MappingDirtyLabel
+            // 
+            MappingDirtyLabel.AutoSize = true;
+            MappingDirtyLabel.ForeColor = Color.DarkOrange;
+            MappingDirtyLabel.Location = new Point(144, 12);
+            MappingDirtyLabel.Name = "MappingDirtyLabel";
+            MappingDirtyLabel.Size = new Size(175, 20);
+            MappingDirtyLabel.TabIndex = 1;
+            MappingDirtyLabel.Text = "Unsaved mapping changes";
+            MappingDirtyLabel.Visible = false;
+            // 
+            // RefreshSpesnetButton
+            // 
+            RefreshSpesnetButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            RefreshSpesnetButton.Location = new Point(1570, 8);
+            RefreshSpesnetButton.Name = "RefreshSpesnetButton";
+            RefreshSpesnetButton.Size = new Size(220, 29);
+            RefreshSpesnetButton.TabIndex = 2;
+            RefreshSpesnetButton.Text = "Refresh Spesnet Reference Data";
+            RefreshSpesnetButton.UseVisualStyleBackColor = true;
+            RefreshSpesnetButton.Click += RefreshSpesnetButton_Click;
+            // 
             // RefreshTogglButton
             // 
             RefreshTogglButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            RefreshTogglButton.Location = new Point(812, 8);
+            RefreshTogglButton.Location = new Point(1796, 8);
             RefreshTogglButton.Name = "RefreshTogglButton";
             RefreshTogglButton.Size = new Size(153, 29);
-            RefreshTogglButton.TabIndex = 1;
+            RefreshTogglButton.TabIndex = 3;
             RefreshTogglButton.Text = "Refresh from Toggl";
             RefreshTogglButton.UseVisualStyleBackColor = true;
             RefreshTogglButton.Click += RefreshTogglButton_Click;
@@ -180,13 +217,12 @@
             MappingGrid.Location = new Point(8, 43);
             MappingGrid.Name = "MappingGrid";
             MappingGrid.RowHeadersWidth = 51;
-            MappingGrid.Size = new Size(960, 405);
-            MappingGrid.TabIndex = 0;
+            MappingGrid.Size = new Size(1944, 405);
+            MappingGrid.TabIndex = 4;
             // 
             // settingsTabPage
             // 
             settingsTabPage.Controls.Add(SaveSettingsButton);
-            settingsTabPage.Controls.Add(RefreshSpesnetButton);
             settingsTabPage.Controls.Add(SpesnetDomainTextBox);
             settingsTabPage.Controls.Add(spesnetDomainLabel);
             settingsTabPage.Controls.Add(SpesnetPasswordTextBox);
@@ -198,7 +234,7 @@
             settingsTabPage.Location = new Point(4, 29);
             settingsTabPage.Name = "settingsTabPage";
             settingsTabPage.Padding = new Padding(8);
-            settingsTabPage.Size = new Size(976, 456);
+            settingsTabPage.Size = new Size(1960, 456);
             settingsTabPage.TabIndex = 2;
             settingsTabPage.Text = "Settings";
             settingsTabPage.UseVisualStyleBackColor = true;
@@ -213,22 +249,12 @@
             SaveSettingsButton.UseVisualStyleBackColor = true;
             SaveSettingsButton.Click += SaveSettingsButton_Click;
             // 
-            // RefreshSpesnetButton
-            // 
-            RefreshSpesnetButton.Location = new Point(157, 286);
-            RefreshSpesnetButton.Name = "RefreshSpesnetButton";
-            RefreshSpesnetButton.Size = new Size(220, 29);
-            RefreshSpesnetButton.TabIndex = 12;
-            RefreshSpesnetButton.Text = "Refresh Spesnet Reference Data";
-            RefreshSpesnetButton.UseVisualStyleBackColor = true;
-            RefreshSpesnetButton.Click += RefreshSpesnetButton_Click;
-            // 
             // SpesnetDomainTextBox
             // 
             SpesnetDomainTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             SpesnetDomainTextBox.Location = new Point(11, 190);
             SpesnetDomainTextBox.Name = "SpesnetDomainTextBox";
-            SpesnetDomainTextBox.Size = new Size(950, 27);
+            SpesnetDomainTextBox.Size = new Size(1934, 27);
             SpesnetDomainTextBox.TabIndex = 8;
             // 
             // spesnetDomainLabel
@@ -246,7 +272,7 @@
             SpesnetPasswordTextBox.Location = new Point(11, 137);
             SpesnetPasswordTextBox.Name = "SpesnetPasswordTextBox";
             SpesnetPasswordTextBox.PasswordChar = '*';
-            SpesnetPasswordTextBox.Size = new Size(950, 27);
+            SpesnetPasswordTextBox.Size = new Size(1934, 27);
             SpesnetPasswordTextBox.TabIndex = 6;
             // 
             // spesnetPasswordLabel
@@ -263,7 +289,7 @@
             SpesnetUsernameTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             SpesnetUsernameTextBox.Location = new Point(11, 84);
             SpesnetUsernameTextBox.Name = "SpesnetUsernameTextBox";
-            SpesnetUsernameTextBox.Size = new Size(950, 27);
+            SpesnetUsernameTextBox.Size = new Size(1934, 27);
             SpesnetUsernameTextBox.TabIndex = 4;
             // 
             // spesnetUsernameLabel
@@ -280,7 +306,7 @@
             TogglApiTokenTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             TogglApiTokenTextBox.Location = new Point(11, 31);
             TogglApiTokenTextBox.Name = "TogglApiTokenTextBox";
-            TogglApiTokenTextBox.Size = new Size(950, 27);
+            TogglApiTokenTextBox.Size = new Size(1934, 27);
             TogglApiTokenTextBox.TabIndex = 2;
             // 
             // togglApiTokenLabel
@@ -318,7 +344,7 @@
             SpesnetProjectColumn.HeaderText = "Spesnet Project";
             SpesnetProjectColumn.MinimumWidth = 6;
             SpesnetProjectColumn.Name = "SpesnetProjectColumn";
-            SpesnetProjectColumn.Width = 180;
+            SpesnetProjectColumn.Width = 420;
             // 
             // SpesnetClientColumn
             // 
@@ -332,16 +358,16 @@
             SpesnetWorkTaskColumn.HeaderText = "Spesnet Work Task";
             SpesnetWorkTaskColumn.MinimumWidth = 6;
             SpesnetWorkTaskColumn.Name = "SpesnetWorkTaskColumn";
-            SpesnetWorkTaskColumn.Width = 180;
+            SpesnetWorkTaskColumn.Width = 480;
             // 
             // SyncForm
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(984, 561);
+            ClientSize = new Size(1968, 561);
             Controls.Add(mainTabControl);
             Controls.Add(topPanel);
-            MinimumSize = new Size(900, 600);
+            MinimumSize = new Size(1800, 600);
             Name = "SyncForm";
             Text = "Toggl to Spesnet Sync";
             FormClosing += SyncForm_FormClosing;
@@ -352,6 +378,7 @@
             logTabPage.ResumeLayout(false);
             logTabPage.PerformLayout();
             mappingTabPage.ResumeLayout(false);
+            mappingTabPage.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)MappingGrid).EndInit();
             settingsTabPage.ResumeLayout(false);
             settingsTabPage.PerformLayout();
@@ -367,6 +394,9 @@
         private TabControl mainTabControl;
         private TabPage logTabPage;
         private TextBox LogTextBox;
+        private Button SaveMappingsButton;
+        private Label MappingDirtyLabel;
+        private Button RefreshSpesnetButton;
         private Button RefreshTogglButton;
         private TabPage mappingTabPage;
         private DataGridView MappingGrid;
@@ -380,7 +410,6 @@
         private Label spesnetDomainLabel;
         private TextBox SpesnetDomainTextBox;
         private Button SaveSettingsButton;
-        private Button RefreshSpesnetButton;
         private DataGridViewComboBoxColumn StatusColumn;
         private DataGridViewComboBoxColumn TogglClientColumn;
         private DataGridViewComboBoxColumn TogglProjectColumn;

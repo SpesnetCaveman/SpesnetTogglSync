@@ -41,9 +41,11 @@ public class SyncService
         {
             var sample = string.Join("; ", unresolved.Take(5).Select(FormatMappingLabel));
             var more = unresolved.Count > 5 ? $" (+{unresolved.Count - 5} more)" : string.Empty;
-            return Fail(
+            var message =
                 $"Resolve mapping status for {unresolved.Count} row(s) still set to New before syncing: {sample}{more}. " +
-                "Set each to Active (with Spesnet mappings) or Ignore.");
+                "Set each to Active (with Spesnet mappings) or Ignore.";
+            _logger.Error(message);
+            return Fail(message);
         }
 
         var entries = await _togglClient.GetTimeEntriesSinceAsync(watermarkUtc, cancellationToken);
@@ -51,22 +53,25 @@ public class SyncService
 
         if (entries.Count == 0)
         {
+            var noEntriesMessage = "Sync complete. Synced 0, skipped 0 (no new time entries after watermark).";
+            _logger.Info(noEntriesMessage);
             return new SyncResult
             {
                 Success = true,
-                Message = "No new time entries to sync.",
+                Message = noEntriesMessage,
                 LastSyncedStartTime = watermarkUtc
             };
         }
 
         var candidateEntries = new List<TogglTimeEntry>();
         var skippedCount = 0;
+        var ignoredByMappingCount = 0;
 
         foreach (var entry in entries)
         {
             if (entry.Duration < 0 || string.IsNullOrWhiteSpace(entry.Stop))
             {
-                _logger.Warn($"Skipping running entry {entry.Id} starting {entry.StartUtc:u}");
+                _logger.Warn($"Skipped (still running): {FormatEntryLabel(entry)}");
                 skippedCount++;
                 continue;
             }
@@ -87,8 +92,11 @@ public class SyncService
 
             if (HasClientLevelIgnore(mappings, entry))
             {
-                _logger.Info($"Skipping entry {entry.Id} for ignored client '{entry.ClientName}'");
+                _logger.Info(
+                    $"Ignored (mapping status=Ignore, client-level): {FormatEntryLabel(entry)} — " +
+                    $"client '{entry.ClientName}'");
                 skippedCount++;
+                ignoredByMappingCount++;
                 continue;
             }
 
@@ -105,8 +113,10 @@ public class SyncService
             if (mapping.Status == EntryMappingStatus.Ignore)
             {
                 _logger.Info(
-                    $"Skipping entry {entry.Id} for ignored mapping '{entry.ClientName}' / '{entry.ProjectName}'");
+                    $"Ignored (mapping status=Ignore): {FormatEntryLabel(entry)} — " +
+                    $"'{entry.ClientName}' / '{entry.ProjectName}'");
                 skippedCount++;
+                ignoredByMappingCount++;
                 continue;
             }
 
@@ -131,7 +141,9 @@ public class SyncService
 
         if (candidateEntries.Count == 0)
         {
-            var emptyMessage = $"No entries to sync. Skipped {skippedCount}.";
+            var emptyMessage =
+                $"Sync complete. Synced 0, skipped {skippedCount} " +
+                $"({ignoredByMappingCount} ignored by mapping status).";
             _logger.Info(emptyMessage);
             return new SyncResult
             {
@@ -167,11 +179,13 @@ public class SyncService
 
             var syncState = new SyncState { LastSyncedStartTime = currentWatermark };
             _configService.SaveSyncState(syncState);
-            _logger.Info($"Synced entry {entry.Id}; watermark updated to {currentWatermark:u}");
+            _logger.Info($"Synced {FormatEntryLabel(entry)}; watermark updated to {currentWatermark:u}");
             Report($"Synced entry {entry.Id}", currentWatermark);
         }
 
-        var summary = $"Sync complete. Synced {syncedCount}, skipped {skippedCount}.";
+        var summary =
+            $"Sync complete. Synced {syncedCount}, skipped {skippedCount} " +
+            $"({ignoredByMappingCount} ignored by mapping status).";
         _logger.Info(summary);
         return new SyncResult
         {
@@ -181,6 +195,14 @@ public class SyncService
             SkippedCount = skippedCount,
             LastSyncedStartTime = currentWatermark
         };
+    }
+
+    private static string FormatEntryLabel(TogglTimeEntry entry)
+    {
+        var description = string.IsNullOrWhiteSpace(entry.Description)
+            ? "(no description)"
+            : entry.Description!;
+        return $"entry {entry.Id} at {entry.StartUtc:yyyy-MM-dd HH:mm} UTC '{description}'";
     }
 
     /// <summary>

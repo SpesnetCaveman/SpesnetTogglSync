@@ -58,11 +58,12 @@ When a debugger is attached, `Debugger.Break()` runs there. Inspect locals: `aiP
 | `SpesnetTogglSync.SpesnetApi/SpesnetTimekeepingClient.cs` | Real Spesnet HTTP + cookies |
 | `SpesnetTogglSync.SpesnetApi/SpesnetApiHttp.cs` | Central Spesnet send + failure breakpoint |
 | `SpesnetTogglSync.SpesnetApi/MockSpesnetTimekeepingClient.cs` | Local test double |
-| `SpesnetTogglSync/Services/ConfigService.cs` | `appsettings.json`, `syncstate.json`, `mappings.json` |
-| `SpesnetTogglSync/Services/FileLogger.cs` | `logs/sync-YYYYMMDD.log` + UI events (`IApiLogger`) |
+| `SpesnetTogglSync/Services/ConfigService.cs` | Bootstrap `config-location.json` + data-dir `appsettings` / `syncstate` / `mappings` |
+| `SpesnetTogglSync/Services/FileLogger.cs` | `logs/sync-YYYYMMDD.log` under data dir + UI events (`IApiLogger`) |
 | `SpesnetTogglSync.Shared/Models/` | Shared DTOs and settings |
 | `SpesnetTogglSync/Data/mock-spesnet-reference.json` | Mock projects/clients/tasks |
 | `SpesnetTogglSync/appsettings.example.json` | Template without secrets |
+| `SpesnetTogglSync/config-location.example.json` | Bootstrap pointer template for relocatable data dir |
 
 ## Spesnet API surface (real)
 
@@ -82,7 +83,11 @@ Model `Models.TogglClient` vs HTTP helper `TogglApi.TogglApiClient`. Do **not** 
 
 ## Secrets and git
 
-Never commit `appsettings.json`, `syncstate.json`, `mappings.json`, or `logs/`. Update `appsettings.example.json` when adding settings keys.
+Never commit `appsettings.json`, `syncstate.json`, `mappings.json`, `config-location.json`, or `logs/`. Update `appsettings.example.json` / `config-location.example.json` when adding settings keys.
+
+## Data directory (bootstrap)
+
+`config-location.json` next to the exe is a small pointer (`dataDirectory`) so settings/mappings/syncstate/logs can live under a cloud-backed folder. Read it first; if missing, use the install directory. Do not put the data path only inside `appsettings.json` (chicken-and-egg).
 
 ## Coding preferences
 

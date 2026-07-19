@@ -59,3 +59,6 @@ nunit-*.xml
 SpesnetTogglSync/bin
 SpesnetTogglSync/obj
 SpesnetTogglSync/appsettings.json
+SpesnetTogglSync/config-location.json
+SpesnetTogglSync/mappings.json
+SpesnetTogglSync/syncstate.json

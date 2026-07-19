@@ -25,6 +25,8 @@ alwaysApply: false
 
 ## Config / logging
 
-- Persist via `ConfigService` JSON (camelCase, indented).
-- Do not commit secrets; extend `appsettings.example.json` for new keys.
-- Use `FileLogger` (`IApiLogger`) for auditable trail.
+- Persist via `ConfigService` JSON (camelCase, indented) under the resolved data directory.
+- Bootstrap: optional `config-location.json` next to the exe (`dataDirectory`); never put that path only inside appsettings.
+- Do not commit secrets; extend `appsettings.example.json` / `config-location.example.json` for new keys.
+- Use `FileLogger` (`IApiLogger`) for auditable trail (logs under data directory).
+- Log each Ignore skip explicitly; end sync with synced/skipped summary counts.

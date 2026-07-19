@@ -6,6 +6,8 @@ namespace SpesnetTogglSync.Services;
 
 public class ConfigService
 {
+    public const string ConfigLocationFileName = "config-location.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -15,23 +17,74 @@ public class ConfigService
     };
 
     private readonly string _baseDirectory;
+    private readonly string _installDirectory;
 
     public ConfigService(string? baseDirectory = null)
     {
-        _baseDirectory = baseDirectory ?? AppContext.BaseDirectory;
+        _installDirectory = AppContext.BaseDirectory;
+        _baseDirectory = baseDirectory ?? ResolveDataDirectory();
     }
+
+    /// <summary>Directory that holds appsettings, mappings, syncstate, and logs.</summary>
+    public string DataDirectory => _baseDirectory;
+
+    /// <summary>Directory containing the exe and optional config-location.json bootstrap.</summary>
+    public string InstallDirectory => _installDirectory;
 
     private string AppSettingsPath => Path.Combine(_baseDirectory, "appsettings.json");
     private string SyncStatePath => Path.Combine(_baseDirectory, "syncstate.json");
     private string MappingsPath => Path.Combine(_baseDirectory, "mappings.json");
 
+    /// <summary>
+    /// Reads <c>config-location.json</c> next to the exe (if present) to locate the
+    /// data directory. Falls back to the install directory when the pointer is missing
+    /// or empty. Relative paths are resolved against the install directory.
+    /// </summary>
+    public static string ResolveDataDirectory(string? installDirectory = null)
+    {
+        var install = installDirectory ?? AppContext.BaseDirectory;
+        var pointerPath = Path.Combine(install, ConfigLocationFileName);
+        if (!File.Exists(pointerPath))
+        {
+            return install;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(pointerPath);
+            var location = JsonSerializer.Deserialize<ConfigLocation>(json, JsonOptions);
+            var configured = location?.DataDirectory?.Trim();
+            if (string.IsNullOrWhiteSpace(configured))
+            {
+                return install;
+            }
+
+            var resolved = Path.IsPathRooted(configured)
+                ? configured
+                : Path.GetFullPath(Path.Combine(install, configured));
+
+            Directory.CreateDirectory(resolved);
+            return resolved;
+        }
+        catch
+        {
+            return install;
+        }
+    }
+
     public AppSettings LoadSettings()
     {
         if (!File.Exists(AppSettingsPath))
         {
-            var examplePath = Path.Combine(_baseDirectory, "appsettings.example.json");
+            var examplePath = Path.Combine(_installDirectory, "appsettings.example.json");
+            if (!File.Exists(examplePath))
+            {
+                examplePath = Path.Combine(_baseDirectory, "appsettings.example.json");
+            }
+
             if (File.Exists(examplePath))
             {
+                Directory.CreateDirectory(_baseDirectory);
                 File.Copy(examplePath, AppSettingsPath);
             }
             else
