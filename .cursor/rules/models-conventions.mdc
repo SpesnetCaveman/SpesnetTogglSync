@@ -1,0 +1,13 @@
+---
+description: DTO and config model conventions for SpesnetTogglSync
+globs: SpesnetTogglSync/Models/**/*.cs
+alwaysApply: false
+---
+
+# Models conventions
+
+- Use `[JsonPropertyName("…")]` for external API shapes (Toggl snake_case / Spesnet lowercase field names).
+- Local persistence (`AppSettings`, `SyncState`, `MappingsFile`) uses `ConfigService` camelCase serialization — keep property names readable C#.
+- `SpesnetReferenceCache` may live inside `AppSettings`; keep `ClientsByProject` keyed by Spesnet project id.
+- Per-user sync config lives under `MappingsFile.Users[togglUserId]`.
+- Do not store secrets in models beyond what `AppSettings` already holds; never add secrets to committed examples.

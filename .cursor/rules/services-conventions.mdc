@@ -1,0 +1,28 @@
+---
+description: Conventions for SyncService, API clients, and config persistence
+globs: SpesnetTogglSync/Services/**/*.cs
+alwaysApply: false
+---
+
+# Services conventions
+
+## SyncService
+
+- Fail-fast validation before Spesnet writes.
+- Skip running Toggl entries (`duration < 0` or null `stop`) with a warn log.
+- Update watermark via `ConfigService.SaveSyncState` after each successful entry.
+- Raise `Progress` for UI status / DateTimePicker updates.
+
+## Clients
+
+- Implement `ITogglClient` / `ISpesnetTimekeepingClient`; dispose `HttpClient` owners.
+- HTTP type is `TogglApiClient` (not `TogglClient` — that name is the model).
+- Real Spesnet: `CookieContainer` after `POST api/Account/Login`.
+- Mock: log JSON payloads; load `Data/mock-spesnet-reference.json`.
+- New Spesnet endpoints: add to interface + both real and mock.
+
+## Config / logging
+
+- Persist via `ConfigService` JSON (camelCase, indented).
+- Do not commit secrets; extend `appsettings.example.json` for new keys.
+- Use `FileLogger` (Info/Warn/Error) for auditable trail.

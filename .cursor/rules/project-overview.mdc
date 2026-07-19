@@ -1,0 +1,30 @@
+---
+description: Project purpose, architecture, and sync domain for SpesnetTogglSync
+alwaysApply: true
+---
+
+# SpesnetTogglSync — project context
+
+WinForms (.NET 10) app that syncs **Toggl Track** → **Spesnet/EvolveMed Timekeeping**.
+
+## Flow
+
+`SyncForm` → `SyncService` → `TogglApiClient` + `ISpesnetTimekeepingClient` (mock or real). State in `appsettings.json`, `syncstate.json`, `mappings.json`; logs under `logs/`.
+
+## Mapping (required)
+
+- Toggl client → Spesnet **project + client**
+- Toggl project → Spesnet **work task**
+- Toggl description → Spesnet **comment**
+
+Spesnet clients: `GET api/Client/GetClientsByProject?projectId=` (project first).
+
+## Non-negotiable sync rules
+
+- Watermark advances only after a successful save; persist immediately.
+- Validate all candidates before any write; abort with clear missing-map / missing client-project messages.
+- Sync only checked Toggl clients; one Toggl time-entry API call per sync when possible (`meta=true`).
+- Split entries > 8h into ≤8h `normalHours` chunks.
+- Keep mock Spesnet path (`UseMockSpesnet`) working alongside the real client.
+
+Prefer `AGENTS.md` and `README.md` for deeper API and file-layout detail.

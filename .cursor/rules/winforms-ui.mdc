@@ -1,0 +1,26 @@
+---
+description: WinForms SyncForm UI and mapping grid conventions
+globs: SpesnetTogglSync/SyncForm*.cs
+alwaysApply: false
+---
+
+# SyncForm conventions
+
+## Layout
+
+- Top bar: watermark DateTimePicker, Start Sync, mock checkbox, status.
+- Tabs: Sync Log, Toggl Clients (CheckedListBox), Client Mapping, Project Mapping, Settings.
+- Prefer editing `SyncForm.Designer.cs` for control layout; keep async/event wiring in `SyncForm.cs`.
+
+## Mapping grids
+
+- Client mapping: Toggl client → Spesnet project combo → Spesnet client combo (reload clients when project changes).
+- Project mapping: Toggl project → Spesnet work task.
+- Persist selections/mappings on close and before sync via `SaveMappingsFromUi`.
+
+## Behaviour
+
+- Disable sync/refresh buttons while async work runs.
+- Marshal logger UI updates with `Invoke`/`BeginInvoke` when needed.
+- On load: restore watermark, settings, mappings; optionally auto-load Spesnet reference (especially mock).
+- Require Spesnet reference cache + ≥1 checked Toggl client before starting sync.
