@@ -230,14 +230,13 @@ public class SyncService
     };
 
     /// <summary>
-    /// Midnight of the entry's South African calendar date, in the Spesnet API shape.
+    /// Entry start in South African time (GMT+2), in the Spesnet API shape.
     /// </summary>
     private static string ToSpesnetTxDateTime(DateTime startUtc)
     {
-        var southAfricaDate = TimeZoneInfo
-            .ConvertTimeFromUtc(ToUtc(startUtc), SouthAfricaTimeZone)
-            .Date;
-        return southAfricaDate.ToString("yyyy-MM-dd'T'00:00:00.000'Z'");
+        var southAfricaLocal = TimeZoneInfo
+            .ConvertTimeFromUtc(ToUtc(startUtc), SouthAfricaTimeZone);
+        return southAfricaLocal.ToString("yyyy-MM-dd'T'HH:mm:ss.fff");
     }
 
     private static TimeZoneInfo ResolveSouthAfricaTimeZone()
@@ -394,7 +393,7 @@ public class SyncService
     {
         var totalHours = entry.Duration / 3600.0;
         var remaining = totalHours;
-        // Spesnet expects the work date in South African time (GMT+2), not UTC.
+        // Spesnet expects the start in South African time (GMT+2), not UTC.
         var txDateTime = ToSpesnetTxDateTime(entry.StartUtc);
         var comment = string.IsNullOrWhiteSpace(entry.Description) ? "(no description)" : entry.Description!;
         var result = new List<SpesnetWorkDoneEntry>();

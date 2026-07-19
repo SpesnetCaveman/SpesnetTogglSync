@@ -75,7 +75,7 @@ When a debugger is attached, `Debugger.Break()` runs there. Inspect locals: `aiP
 - `GET api/worktask`
 - `POST api/worktask/save` — body `{ workDoneList, accessKey }`
 
-`txdatetime` is midnight of the entry’s **South African (GMT+2)** calendar date: `yyyy-MM-ddT00:00:00.000Z`. Convert Toggl `start` from UTC to Africa/Johannesburg before taking the date (entries after 22:00 UTC fall on the next SA day).
+`txdatetime` is the entry start converted to **South African (GMT+2)** local time: `yyyy-MM-ddTHH:mm:ss.fff` (no `Z` / offset). Convert Toggl `start` from UTC to Africa/Johannesburg (do not send UTC clock time).
 
 ## Naming collision
 
