@@ -25,11 +25,11 @@
             logTabPage = new TabPage();
             LogTextBox = new TextBox();
             mappingTabPage = new TabPage();
+            MappingGrid = new DataGridView();
             SaveMappingsButton = new Button();
             MappingDirtyLabel = new Label();
             RefreshSpesnetButton = new Button();
             RefreshTogglButton = new Button();
-            MappingGrid = new DataGridView();
             settingsTabPage = new TabPage();
             SaveSettingsButton = new Button();
             DataDirectoryTextBox = new TextBox();
@@ -85,12 +85,12 @@
             StartSyncDateTimeControl.Format = DateTimePickerFormat.Custom;
             StartSyncDateTimeControl.Location = new Point(94, 14);
             StartSyncDateTimeControl.Name = "StartSyncDateTimeControl";
-            StartSyncDateTimeControl.Size = new Size(175, 27);
+            StartSyncDateTimeControl.Size = new Size(191, 27);
             StartSyncDateTimeControl.TabIndex = 1;
             // 
             // StartSyncButton
             // 
-            StartSyncButton.Location = new Point(284, 13);
+            StartSyncButton.Location = new Point(302, 14);
             StartSyncButton.Name = "StartSyncButton";
             StartSyncButton.Size = new Size(110, 29);
             StartSyncButton.TabIndex = 2;
@@ -112,7 +112,7 @@
             UseMockSpesnetCheckBox.AutoSize = true;
             UseMockSpesnetCheckBox.Checked = true;
             UseMockSpesnetCheckBox.CheckState = CheckState.Checked;
-            UseMockSpesnetCheckBox.Location = new Point(410, 15);
+            UseMockSpesnetCheckBox.Location = new Point(428, 16);
             UseMockSpesnetCheckBox.Name = "UseMockSpesnetCheckBox";
             UseMockSpesnetCheckBox.Size = new Size(151, 24);
             UseMockSpesnetCheckBox.TabIndex = 4;
@@ -169,6 +169,16 @@
             mappingTabPage.Text = "Mapping";
             mappingTabPage.UseVisualStyleBackColor = true;
             // 
+            // MappingGrid
+            // 
+            MappingGrid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            MappingGrid.ColumnHeadersHeight = 29;
+            MappingGrid.Location = new Point(8, 43);
+            MappingGrid.Name = "MappingGrid";
+            MappingGrid.RowHeadersWidth = 51;
+            MappingGrid.Size = new Size(1526, 405);
+            MappingGrid.TabIndex = 4;
+            // 
             // SaveMappingsButton
             // 
             SaveMappingsButton.Location = new Point(8, 8);
@@ -185,7 +195,7 @@
             MappingDirtyLabel.ForeColor = Color.DarkOrange;
             MappingDirtyLabel.Location = new Point(144, 12);
             MappingDirtyLabel.Name = "MappingDirtyLabel";
-            MappingDirtyLabel.Size = new Size(175, 20);
+            MappingDirtyLabel.Size = new Size(187, 20);
             MappingDirtyLabel.TabIndex = 1;
             MappingDirtyLabel.Text = "Unsaved mapping changes";
             MappingDirtyLabel.Visible = false;
@@ -212,16 +222,6 @@
             RefreshTogglButton.UseVisualStyleBackColor = true;
             RefreshTogglButton.Click += RefreshTogglButton_Click;
             // 
-            // MappingGrid
-            // 
-            MappingGrid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            MappingGrid.ColumnHeadersHeight = 29;
-            MappingGrid.Location = new Point(8, 43);
-            MappingGrid.Name = "MappingGrid";
-            MappingGrid.RowHeadersWidth = 51;
-            MappingGrid.Size = new Size(1526, 405);
-            MappingGrid.TabIndex = 4;
-            // 
             // settingsTabPage
             // 
             settingsTabPage.Controls.Add(SaveSettingsButton);
@@ -245,7 +245,7 @@
             // 
             // SaveSettingsButton
             // 
-            SaveSettingsButton.Location = new Point(11, 339);
+            SaveSettingsButton.Location = new Point(12, 286);
             SaveSettingsButton.Name = "SaveSettingsButton";
             SaveSettingsButton.Size = new Size(130, 29);
             SaveSettingsButton.TabIndex = 13;
@@ -266,7 +266,7 @@
             dataDirectoryLabel.AutoSize = true;
             dataDirectoryLabel.Location = new Point(11, 220);
             dataDirectoryLabel.Name = "dataDirectoryLabel";
-            dataDirectoryLabel.Size = new Size(424, 20);
+            dataDirectoryLabel.Size = new Size(350, 20);
             dataDirectoryLabel.TabIndex = 9;
             dataDirectoryLabel.Text = "Data Directory (settings, mappings, sync state, logs)";
             // 
