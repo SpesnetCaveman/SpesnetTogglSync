@@ -8,6 +8,9 @@ public class SyncService
 {
     private const double MaxHoursPerEntry = 8.0;
 
+    /// <summary>Spesnet work dates are South African (GMT+2); SA has no DST.</summary>
+    private static readonly TimeZoneInfo SouthAfricaTimeZone = ResolveSouthAfricaTimeZone();
+
     private readonly ITogglClient _togglClient;
     private readonly ISpesnetTimekeepingClient _spesnetClient;
     private readonly ConfigService _configService;
@@ -227,6 +230,41 @@ public class SyncService
     };
 
     /// <summary>
+    /// Midnight of the entry's South African calendar date, in the Spesnet API shape.
+    /// </summary>
+    private static string ToSpesnetTxDateTime(DateTime startUtc)
+    {
+        var southAfricaDate = TimeZoneInfo
+            .ConvertTimeFromUtc(ToUtc(startUtc), SouthAfricaTimeZone)
+            .Date;
+        return southAfricaDate.ToString("yyyy-MM-dd'T'00:00:00.000'Z'");
+    }
+
+    private static TimeZoneInfo ResolveSouthAfricaTimeZone()
+    {
+        foreach (var id in new[] { "Africa/Johannesburg", "South Africa Standard Time" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        // South Africa is permanently GMT+2 (no DST).
+        return TimeZoneInfo.CreateCustomTimeZone(
+            "South Africa Standard Time",
+            TimeSpan.FromHours(2),
+            "South Africa Standard Time",
+            "South Africa Standard Time");
+    }
+
+    /// <summary>
     /// Watermark is entry start only, so overlaps still sync when starts differ.
     /// Warn so overlapping Toggl ranges are visible in the log.
     /// </summary>
@@ -356,7 +394,8 @@ public class SyncService
     {
         var totalHours = entry.Duration / 3600.0;
         var remaining = totalHours;
-        var txDateTime = entry.StartUtc.Date.ToString("yyyy-MM-dd'T'00:00:00.000'Z'");
+        // Spesnet expects the work date in South African time (GMT+2), not UTC.
+        var txDateTime = ToSpesnetTxDateTime(entry.StartUtc);
         var comment = string.IsNullOrWhiteSpace(entry.Description) ? "(no description)" : entry.Description!;
         var result = new List<SpesnetWorkDoneEntry>();
 
