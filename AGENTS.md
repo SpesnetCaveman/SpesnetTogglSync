@@ -41,10 +41,10 @@ Every live HTTP call goes through one transport per integration. Failures (non-s
 
 | Integration | Class | Method |
 |-------------|-------|--------|
-| Toggl | `TogglApi/TogglApiHttp.cs` | `OnFailedResponse` |
-| Spesnet | `SpesnetApi/SpesnetApiHttp.cs` | `OnFailedResponse` |
+| Toggl | `TogglApi/TogglApiHttp.cs` | `CreateFailure` |
+| Spesnet | `SpesnetApi/SpesnetApiHttp.cs` | `CreateFailure` |
 
-When a debugger is attached, `Debugger.Break()` runs there. Inspect locals: `operation`, `requestUrl`, `requestPayload`, `response`, `rawResponse`, `exception`. Do **not** add per-endpoint breakpoints for API error inspection — extend these gates instead.
+When a debugger is attached, `Debugger.Break()` runs there. Inspect locals: `aiPrompt` (copy/paste to an AI as-is), `operation`, `requestUrl`, `requestPayload`, `response`, `rawResponse`, `exception`. The same `aiPrompt` is thrown as `HttpRequestException.Message` so UI error popups show it. Do **not** add per-endpoint breakpoints for API error inspection — extend these gates instead.
 
 ## Key files
 

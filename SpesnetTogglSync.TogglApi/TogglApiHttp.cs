@@ -1,17 +1,20 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
+using SpesnetTogglSync.Debugging;
 using SpesnetTogglSync.Logging;
 
 namespace SpesnetTogglSync.TogglApi;
 
 /// <summary>
 /// Single HTTP choke point for every Toggl Track request.
-/// Set one breakpoint in <see cref="OnFailedResponse"/> to inspect any Toggl API failure.
+/// Set one breakpoint in <see cref="CreateFailure"/> to inspect any Toggl API failure.
 /// </summary>
 internal sealed class TogglApiHttp : IDisposable
 {
-    private const string BaseUrl = "https://api.track.toggl.com/api/v9";
+    // Trailing slash required: HttpClient treats relative URLs starting with '/' as host-absolute
+    // and would drop "/api/v9" (e.g. BaseAddress + "/me" → https://api.track.toggl.com/me).
+    private const string BaseUrl = "https://api.track.toggl.com/api/v9/";
 
     private static readonly JsonSerializerOptions PayloadJsonOptions = new()
     {
@@ -66,8 +69,7 @@ internal sealed class TogglApiHttp : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            OnFailedResponse(operation, requestUrl, requestPayload, response: null, rawResponse: null, exception: ex);
-            throw;
+            throw CreateFailure(operation, method, requestUrl, requestPayload, response: null, rawResponse: null, exception: ex);
         }
 
         if (response.IsSuccessStatusCode)
@@ -76,28 +78,36 @@ internal sealed class TogglApiHttp : IDisposable
         }
 
         var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
-        OnFailedResponse(operation, requestUrl, requestPayload, response, rawResponse, exception: null);
-
-        var message =
-            $"Toggl failed to {operation}: {(int)response.StatusCode} {response.ReasonPhrase}. URL: {requestUrl}. {rawResponse}";
-        _logger.Error(message);
-        throw new HttpRequestException(message);
+        throw CreateFailure(operation, method, requestUrl, requestPayload, response, rawResponse, exception: null);
     }
 
     /// <summary>
     /// CENTRAL TOGGL BREAKPOINT — place your breakpoint on the Debugger.Break() line below.
-    /// Locals: <paramref name="operation"/>, <paramref name="requestUrl"/>, <paramref name="requestPayload"/>,
-    /// <paramref name="response"/>, <paramref name="rawResponse"/>, <paramref name="exception"/>.
+    /// Copy <c>aiPrompt</c> from Locals, or read it from the thrown exception message / error popup.
     /// </summary>
-    private static void OnFailedResponse(
+    private HttpRequestException CreateFailure(
         string operation,
+        HttpMethod method,
         string requestUrl,
         string? requestPayload,
         HttpResponseMessage? response,
         string? rawResponse,
         Exception? exception)
     {
+        var aiPrompt = IntegrationFailureAiPrompt.Build(
+            integration: "Toggl Track",
+            operation: operation,
+            httpMethod: method.Method,
+            requestUrl: requestUrl,
+            requestPayload: requestPayload,
+            statusCode: response?.StatusCode,
+            reasonPhrase: response?.ReasonPhrase,
+            rawResponse: rawResponse,
+            exception: exception);
+
+        _ = aiPrompt;
         _ = operation;
+        _ = method;
         _ = requestUrl;
         _ = requestPayload;
         _ = response;
@@ -108,6 +118,9 @@ internal sealed class TogglApiHttp : IDisposable
         {
             Debugger.Break();
         }
+
+        _logger.Error($"Toggl failed to {operation}: {(response is null ? exception?.Message : $"{(int)response.StatusCode} {response.ReasonPhrase}")}. URL: {requestUrl}");
+        return new HttpRequestException(aiPrompt, exception);
     }
 
     public void Dispose() => _httpClient.Dispose();

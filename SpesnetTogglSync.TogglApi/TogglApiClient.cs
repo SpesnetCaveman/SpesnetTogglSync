@@ -22,7 +22,7 @@ public class TogglApiClient : ITogglClient
         var response = await _http.SendAsync(
             "fetch user profile",
             HttpMethod.Get,
-            "/me",
+            "me",
             cancellationToken: cancellationToken);
         var me = await response.Content.ReadFromJsonAsync<TogglMe>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Toggl /me returned empty response.");
@@ -35,7 +35,7 @@ public class TogglApiClient : ITogglClient
         var response = await _http.SendAsync(
             "fetch clients",
             HttpMethod.Get,
-            $"/workspaces/{workspaceId}/clients",
+            $"workspaces/{workspaceId}/clients",
             cancellationToken: cancellationToken);
         return await ReadItemsAsync<TogglClient>(response, cancellationToken);
     }
@@ -46,7 +46,7 @@ public class TogglApiClient : ITogglClient
         var response = await _http.SendAsync(
             "fetch projects",
             HttpMethod.Get,
-            $"/workspaces/{workspaceId}/projects",
+            $"workspaces/{workspaceId}/projects",
             cancellationToken: cancellationToken);
         return await ReadItemsAsync<TogglProject>(response, cancellationToken);
     }
@@ -54,7 +54,7 @@ public class TogglApiClient : ITogglClient
     public async Task<IReadOnlyList<TogglTimeEntry>> GetTimeEntriesSinceAsync(DateTime sinceUtc, CancellationToken cancellationToken = default)
     {
         var startDate = sinceUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
-        var url = $"/me/time_entries?start_date={Uri.EscapeDataString(startDate)}&meta=true";
+        var url = $"me/time_entries?start_date={Uri.EscapeDataString(startDate)}&meta=true";
         _logger.Info($"Toggl: fetching time entries since {startDate}");
         var response = await _http.SendAsync(
             "fetch time entries",

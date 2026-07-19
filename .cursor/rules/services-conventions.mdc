@@ -21,7 +21,7 @@ alwaysApply: false
 - Real Spesnet: `CookieContainer` after `POST api/Account/Login`.
 - Mock: log JSON payloads; load `Data/mock-spesnet-reference.json` from app base directory.
 - New Spesnet endpoints: add to interface + both real and mock.
-- **All live HTTP must go through `TogglApiHttp.SendAsync` / `SpesnetApiHttp.SendAsync`** so failures hit `OnFailedResponse` (central debugger breakpoint + raw body).
+- **All live HTTP must go through `TogglApiHttp.SendAsync` / `SpesnetApiHttp.SendAsync`** so failures hit `CreateFailure` (central debugger breakpoint + AI prompt exception message).
 
 ## Config / logging
 

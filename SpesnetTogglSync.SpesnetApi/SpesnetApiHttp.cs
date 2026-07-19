@@ -2,13 +2,14 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using SpesnetTogglSync.Debugging;
 using SpesnetTogglSync.Logging;
 
 namespace SpesnetTogglSync.SpesnetApi;
 
 /// <summary>
 /// Single HTTP choke point for every Spesnet / EvolveMed Timekeeping request.
-/// Set one breakpoint in <see cref="OnFailedResponse"/> to inspect any Spesnet API failure.
+/// Set one breakpoint in <see cref="CreateFailure"/> to inspect any Spesnet API failure.
 /// </summary>
 internal sealed class SpesnetApiHttp : IDisposable
 {
@@ -65,8 +66,7 @@ internal sealed class SpesnetApiHttp : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            OnFailedResponse(operation, requestUrl, requestPayload, response: null, rawResponse: null, exception: ex);
-            throw;
+            throw CreateFailure(operation, method, requestUrl, requestPayload, response: null, rawResponse: null, exception: ex);
         }
 
         if (response.IsSuccessStatusCode)
@@ -75,28 +75,36 @@ internal sealed class SpesnetApiHttp : IDisposable
         }
 
         var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
-        OnFailedResponse(operation, requestUrl, requestPayload, response, rawResponse, exception: null);
-
-        var message =
-            $"Spesnet failed to {operation}: {(int)response.StatusCode} {response.ReasonPhrase}. URL: {requestUrl}. {rawResponse}";
-        _logger.Error(message);
-        throw new HttpRequestException(message);
+        throw CreateFailure(operation, method, requestUrl, requestPayload, response, rawResponse, exception: null);
     }
 
     /// <summary>
     /// CENTRAL SPESNET BREAKPOINT — place your breakpoint on the Debugger.Break() line below.
-    /// Locals: <paramref name="operation"/>, <paramref name="requestUrl"/>, <paramref name="requestPayload"/>,
-    /// <paramref name="response"/>, <paramref name="rawResponse"/>, <paramref name="exception"/>.
+    /// Copy <c>aiPrompt</c> from Locals, or read it from the thrown exception message / error popup.
     /// </summary>
-    private static void OnFailedResponse(
+    private HttpRequestException CreateFailure(
         string operation,
+        HttpMethod method,
         string requestUrl,
         string? requestPayload,
         HttpResponseMessage? response,
         string? rawResponse,
         Exception? exception)
     {
+        var aiPrompt = IntegrationFailureAiPrompt.Build(
+            integration: "Spesnet / EvolveMed Timekeeping",
+            operation: operation,
+            httpMethod: method.Method,
+            requestUrl: requestUrl,
+            requestPayload: requestPayload,
+            statusCode: response?.StatusCode,
+            reasonPhrase: response?.ReasonPhrase,
+            rawResponse: rawResponse,
+            exception: exception);
+
+        _ = aiPrompt;
         _ = operation;
+        _ = method;
         _ = requestUrl;
         _ = requestPayload;
         _ = response;
@@ -107,6 +115,9 @@ internal sealed class SpesnetApiHttp : IDisposable
         {
             Debugger.Break();
         }
+
+        _logger.Error($"Spesnet failed to {operation}: {(response is null ? exception?.Message : $"{(int)response.StatusCode} {response.ReasonPhrase}")}. URL: {requestUrl}");
+        return new HttpRequestException(aiPrompt, exception);
     }
 
     private static string NormalizeDomain(string domain)

@@ -54,7 +54,7 @@ FileLogger (IApiLogger) writes logs/ and UI log tab
 - **Toggl sync call**: typically one `GET /me/time_entries?start_date=…&meta=true` per run.
 - **Spesnet mock**: `MockSpesnetTimekeepingClient` + `Data/mock-spesnet-reference.json` — logs save payloads, no production API.
 - **Watermark**: advanced and saved after **each** successful Toggl entry save.
-- **Debug API failures**: set one breakpoint in `TogglApiHttp.OnFailedResponse` and/or `SpesnetApiHttp.OnFailedResponse` (auto-breaks when a debugger is attached).
+- **Debug API failures**: set one breakpoint in `TogglApiHttp.CreateFailure` and/or `SpesnetApiHttp.CreateFailure` (auto-breaks when a debugger is attached; exception message is the AI prompt for error popups).
 
 ## Project layout
 
