@@ -9,7 +9,8 @@ alwaysApply: false
 ## SyncService
 
 - Fail-fast validation before Spesnet writes.
-- Skip running Toggl entries (`duration < 0` or null `stop`) with a warn log.
+- Only completed Toggl entries sync (`duration < 0` or null `stop` → warn and stop; defer later entries so start-based watermark cannot orphan the runner).
+- Watermark is entry `StartUtc` only (overlaps still sync); log a warning when ranges overlap.
 - Update watermark via `ConfigService.SaveSyncState` after each successful entry.
 - Raise `Progress` for UI status / DateTimePicker updates.
 

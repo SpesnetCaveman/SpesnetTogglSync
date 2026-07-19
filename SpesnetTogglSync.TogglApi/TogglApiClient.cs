@@ -54,8 +54,11 @@ public class TogglApiClient : ITogglClient
     public async Task<IReadOnlyList<TogglTimeEntry>> GetTimeEntriesSinceAsync(DateTime sinceUtc, CancellationToken cancellationToken = default)
     {
         var startDate = sinceUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
-        var url = $"me/time_entries?start_date={Uri.EscapeDataString(startDate)}&meta=true";
-        _logger.Info($"Toggl: fetching time entries since {startDate}");
+        var endDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var url =
+            $"me/time_entries?start_date={Uri.EscapeDataString(startDate)}" +
+            $"&end_date={Uri.EscapeDataString(endDate)}&meta=true";
+        _logger.Info($"Toggl: fetching time entries from {startDate} to {endDate}");
         var response = await _http.SendAsync(
             "fetch time entries",
             HttpMethod.Get,

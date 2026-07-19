@@ -24,7 +24,8 @@ Spesnet clients: `GET api/Client/GetClientsByProject?projectId=` (project first)
 
 - Watermark advances only after a successful save; persist immediately.
 - Validate all candidates before any write; abort with clear missing-map / missing client-project / unresolved-New messages.
-- Skip Ignore mappings (and client-level Ignore); one Toggl time-entry API call per sync when possible (`meta=true`).
+- Skip Ignore mappings (and client-level Ignore); one Toggl time-entry API call per sync when possible (`start_date` + `end_date` + `meta=true`).
+- Sync only completed Toggl entries; a running timer defers later entries so the start-based watermark cannot skip it. Overlaps still sync; log a warning.
 - Split entries > 8h into ≤8h `normalHours` chunks.
 - Keep mock Spesnet path (`UseMockSpesnet`) working alongside the real client.
 

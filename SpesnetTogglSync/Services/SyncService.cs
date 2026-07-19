@@ -66,14 +66,20 @@ public class SyncService
         var candidateEntries = new List<TogglTimeEntry>();
         var skippedCount = 0;
         var ignoredByMappingCount = 0;
+        var deferredForRunningTimer = false;
 
         foreach (var entry in entries)
         {
-            if (entry.Duration < 0 || string.IsNullOrWhiteSpace(entry.Stop))
+            // Only completed entries can sync. Stop here so the watermark (entry start)
+            // cannot advance past a still-running timer and orphan it.
+            if (IsRunning(entry))
             {
-                _logger.Warn($"Skipped (still running): {FormatEntryLabel(entry)}");
+                _logger.Warn(
+                    $"Skipped (still running): {FormatEntryLabel(entry)}. " +
+                    "Later entries will sync after this timer is stopped.");
                 skippedCount++;
-                continue;
+                deferredForRunningTimer = true;
+                break;
             }
 
             if (!entry.ClientId.HasValue || string.IsNullOrWhiteSpace(entry.ClientName))
@@ -131,6 +137,17 @@ public class SyncService
 
             candidateEntries.Add(entry);
         }
+
+        if (deferredForRunningTimer)
+        {
+            var remaining = entries.Count - skippedCount - candidateEntries.Count;
+            if (remaining > 0)
+            {
+                _logger.Info($"Deferred {remaining} later Toggl entr{(remaining == 1 ? "y" : "ies")} until the running timer stops.");
+            }
+        }
+
+        LogOverlappingEntries(candidateEntries);
 
         var validationError = ValidateMappings(candidateEntries, mappings, referenceCache);
         if (validationError != null)
@@ -195,6 +212,30 @@ public class SyncService
             SkippedCount = skippedCount,
             LastSyncedStartTime = currentWatermark
         };
+    }
+
+    private static bool IsRunning(TogglTimeEntry entry) =>
+        entry.Duration < 0 || string.IsNullOrWhiteSpace(entry.Stop);
+
+    /// <summary>
+    /// Watermark is entry start only, so overlaps still sync when starts differ.
+    /// Warn so overlapping Toggl ranges are visible in the log.
+    /// </summary>
+    private void LogOverlappingEntries(IReadOnlyList<TogglTimeEntry> entries)
+    {
+        for (var i = 1; i < entries.Count; i++)
+        {
+            var previous = entries[i - 1];
+            var current = entries[i];
+            var previousEnd = previous.StartUtc.AddSeconds(previous.Duration);
+            if (current.StartUtc < previousEnd)
+            {
+                _logger.Warn(
+                    $"Overlapping Toggl entries: {FormatEntryLabel(previous)} " +
+                    $"(ends {previousEnd:yyyy-MM-dd HH:mm} UTC) overlaps {FormatEntryLabel(current)}. " +
+                    "Both will sync because watermark tracks start time only.");
+            }
+        }
     }
 
     private static string FormatEntryLabel(TogglTimeEntry entry)

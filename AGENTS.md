@@ -33,7 +33,7 @@ Solution projects:
 3. **Mapping status**: each entry mapping is `Active`, `Ignore`, or `New`. Sync is blocked while any relevant row remains `New`. `Ignore` skips entries; `Active` requires full Spesnet destination. A client-only row (empty project) with `Ignore` skips every project for that client.
 4. **Missing Toggl client or project** on an entry → abort; include entry date/time in the message.
 5. **Duration > 8 hours** → split into multiple Spesnet rows ≤ 8h; always use `normalHours` (overtime = 0).
-6. **Minimize Toggl calls**: sync uses `GET /me/time_entries?start_date=&meta=true`. Clients/projects fetch only for mapping UI refresh.
+6. **Minimize Toggl calls**: sync uses `GET /me/time_entries?start_date=&end_date=&meta=true` (end_date = now). Clients/projects fetch only for mapping UI refresh. Only completed entries sync; a running timer defers later entries so the start-based watermark cannot skip it. Overlaps still sync (watermark = start); log a warning.
 7. **Mock by default**: `UseMockSpesnet: true` → `MockSpesnetTimekeepingClient`. Real client uses cookie login. Prefer keeping both behind `ISpesnetTimekeepingClient`.
 
 ## Central API failure breakpoints
