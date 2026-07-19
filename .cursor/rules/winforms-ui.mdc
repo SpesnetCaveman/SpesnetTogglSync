@@ -14,8 +14,8 @@ alwaysApply: false
 
 ## Mapping grid
 
-- One grid: Toggl client + Toggl project → Spesnet project → Spesnet client → Spesnet work task.
-- Reload Spesnet clients when the Spesnet project combo changes (`GetClientsByProject` / reference cache).
+- One grid: Toggl client → Toggl project (filtered by client) → Spesnet project → Spesnet client → Spesnet work task.
+- Reload Toggl projects when the Toggl client combo changes; reload Spesnet clients when the Spesnet project combo changes.
 - Persist selections/mappings on close and before sync via `SaveMappingsFromUi`.
 
 ## Behaviour

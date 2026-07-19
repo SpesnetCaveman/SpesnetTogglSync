@@ -248,7 +248,6 @@ public partial class SyncForm : Form
     private void RefreshMappingGridSources()
     {
         var togglClientNames = _togglClients.Select(c => c.Name).Distinct().OrderBy(n => n).ToArray();
-        var togglProjectNames = _togglProjects.Select(p => p.Name).Distinct().OrderBy(n => n).ToArray();
         var projectItems = _referenceCache.Projects
             .Select(p => new ComboItem(p.Id, p.ProjName))
             .OrderBy(p => p.Name)
@@ -259,7 +258,6 @@ public partial class SyncForm : Form
             .ToArray();
 
         SetComboColumnDataSource(TogglClientColumn, togglClientNames);
-        SetComboColumnDataSource(TogglProjectColumn, togglProjectNames);
         SetComboColumnDataSource(SpesnetProjectColumn, projectItems);
         SetComboColumnDataSource(SpesnetWorkTaskColumn, workTaskItems);
 
@@ -267,7 +265,8 @@ public partial class SyncForm : Form
         {
             if (!row.IsNewRow)
             {
-                UpdateClientComboForRow(row);
+                UpdateTogglProjectComboForRow(row);
+                UpdateSpesnetClientComboForRow(row);
             }
         }
     }
@@ -307,16 +306,36 @@ public partial class SyncForm : Form
 
     private void MappingGrid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
     {
-        if (MappingGrid.CurrentCell?.OwningColumn != SpesnetProjectColumn)
+        if (e.Control is not ComboBox comboBox)
         {
             return;
         }
 
-        if (e.Control is ComboBox comboBox)
+        comboBox.SelectedIndexChanged -= TogglClientCombo_SelectedIndexChanged;
+        comboBox.SelectedIndexChanged -= SpesnetProjectCombo_SelectedIndexChanged;
+
+        if (MappingGrid.CurrentCell?.OwningColumn == TogglClientColumn)
         {
-            comboBox.SelectedIndexChanged -= SpesnetProjectCombo_SelectedIndexChanged;
+            comboBox.SelectedIndexChanged += TogglClientCombo_SelectedIndexChanged;
+        }
+        else if (MappingGrid.CurrentCell?.OwningColumn == TogglProjectColumn && MappingGrid.CurrentRow != null)
+        {
+            UpdateTogglProjectComboForRow(MappingGrid.CurrentRow);
+        }
+        else if (MappingGrid.CurrentCell?.OwningColumn == SpesnetProjectColumn)
+        {
             comboBox.SelectedIndexChanged += SpesnetProjectCombo_SelectedIndexChanged;
         }
+    }
+
+    private void TogglClientCombo_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (MappingGrid.CurrentRow == null)
+        {
+            return;
+        }
+
+        UpdateTogglProjectComboForRow(MappingGrid.CurrentRow);
     }
 
     private void SpesnetProjectCombo_SelectedIndexChanged(object? sender, EventArgs e)
@@ -326,20 +345,60 @@ public partial class SyncForm : Form
             return;
         }
 
-        UpdateClientComboForRow(MappingGrid.CurrentRow);
+        UpdateSpesnetClientComboForRow(MappingGrid.CurrentRow);
     }
 
     private void MappingGrid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex != SpesnetProjectColumn.Index)
+        if (e.RowIndex < 0)
         {
             return;
         }
 
-        UpdateClientComboForRow(MappingGrid.Rows[e.RowIndex]);
+        if (e.ColumnIndex == TogglClientColumn.Index)
+        {
+            UpdateTogglProjectComboForRow(MappingGrid.Rows[e.RowIndex]);
+        }
+        else if (e.ColumnIndex == SpesnetProjectColumn.Index)
+        {
+            UpdateSpesnetClientComboForRow(MappingGrid.Rows[e.RowIndex]);
+        }
     }
 
-    private void UpdateClientComboForRow(DataGridViewRow row)
+    private void UpdateTogglProjectComboForRow(DataGridViewRow row)
+    {
+        var togglClientName = Convert.ToString(row.Cells[TogglClientColumn.Index].Value) ?? string.Empty;
+        var togglClient = _togglClients.FirstOrDefault(c =>
+            string.Equals(c.Name, togglClientName, StringComparison.OrdinalIgnoreCase));
+
+        var projectNames = togglClient == null
+            ? Array.Empty<string>()
+            : _togglProjects
+                .Where(p => p.ClientId == togglClient.Id)
+                .Select(p => p.Name)
+                .Distinct()
+                .OrderBy(n => n)
+                .ToArray();
+
+        var projectCell = (DataGridViewComboBoxCell)row.Cells[TogglProjectColumn.Index];
+        projectCell.DataSource = null;
+        projectCell.DataSource = projectNames;
+
+        if (projectNames.Length == 0)
+        {
+            projectCell.Value = null;
+            return;
+        }
+
+        var current = Convert.ToString(projectCell.Value);
+        if (string.IsNullOrEmpty(current) ||
+            !projectNames.Contains(current, StringComparer.OrdinalIgnoreCase))
+        {
+            projectCell.Value = projectNames[0];
+        }
+    }
+
+    private void UpdateSpesnetClientComboForRow(DataGridViewRow row)
     {
         var projectId = GetSelectedId(row.Cells[SpesnetProjectColumn.Index].Value);
         var clients = projectId > 0 && _referenceCache.ClientsByProject.TryGetValue(projectId, out var projectClients)
