@@ -1,6 +1,6 @@
 ---
 description: DTO and config model conventions for SpesnetTogglSync
-globs: SpesnetTogglSync/Models/**/*.cs
+globs: SpesnetTogglSync.Shared/Models/**/*.cs
 alwaysApply: false
 ---
 

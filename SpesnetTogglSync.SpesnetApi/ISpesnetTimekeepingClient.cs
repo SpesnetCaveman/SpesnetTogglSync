@@ -1,6 +1,6 @@
 using SpesnetTogglSync.Models;
 
-namespace SpesnetTogglSync.Services;
+namespace SpesnetTogglSync.SpesnetApi;
 
 public interface ISpesnetTimekeepingClient : IDisposable
 {

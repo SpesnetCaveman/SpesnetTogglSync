@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SpesnetTogglSync.Shared\SpesnetTogglSync.Shared.csproj" />
+    <ProjectReference Include="..\SpesnetTogglSync.TogglApi\SpesnetTogglSync.TogglApi.csproj" />
+    <ProjectReference Include="..\SpesnetTogglSync.SpesnetApi\SpesnetTogglSync.SpesnetApi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="appsettings.example.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -45,25 +45,29 @@ Template: `appsettings.example.json`.
 ## Architecture (high level)
 
 ```
-SyncForm → SyncService → TogglApiClient (real)
-                      → ISpesnetTimekeepingClient (mock or real)
+SyncForm → SyncService → SpesnetTogglSync.TogglApi   (TogglApiClient)
+                      → SpesnetTogglSync.SpesnetApi  (mock or real)
 ConfigService persists settings / mappings / watermark
-FileLogger writes logs/ and UI log tab
+FileLogger (IApiLogger) writes logs/ and UI log tab
 ```
 
 - **Toggl sync call**: typically one `GET /me/time_entries?start_date=…&meta=true` per run.
 - **Spesnet mock**: `MockSpesnetTimekeepingClient` + `Data/mock-spesnet-reference.json` — logs save payloads, no production API.
 - **Watermark**: advanced and saved after **each** successful Toggl entry save.
+- **Debug API failures**: set one breakpoint in `TogglApiHttp.OnFailedResponse` and/or `SpesnetApiHttp.OnFailedResponse` (auto-breaks when a debugger is attached).
 
 ## Project layout
 
 ```
-SpesnetTogglSync/
-├── SyncForm*.cs          # UI
-├── Models/               # DTOs, settings, mappings
-├── Services/             # Config, Toggl, Spesnet, Sync, logging
-├── Data/                 # Mock Spesnet reference data
-└── appsettings.example.json
+SpesnetTogglSync.slnx
+├── SpesnetTogglSync/                 # WinForms UI, SyncService, Config, FileLogger
+│   ├── SyncForm*.cs
+│   ├── Services/
+│   ├── Data/                         # Mock Spesnet reference data
+│   └── appsettings.example.json
+├── SpesnetTogglSync.Shared/          # Models + IApiLogger
+├── SpesnetTogglSync.TogglApi/        # Toggl Track library (central TogglApiHttp)
+└── SpesnetTogglSync.SpesnetApi/      # Spesnet library (central SpesnetApiHttp + mock)
 ```
 
 ## Auth notes

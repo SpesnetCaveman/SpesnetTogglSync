@@ -1,3 +1,6 @@
 <Solution>
+  <Project Path="SpesnetTogglSync.Shared/SpesnetTogglSync.Shared.csproj" />
+  <Project Path="SpesnetTogglSync.TogglApi/SpesnetTogglSync.TogglApi.csproj" />
+  <Project Path="SpesnetTogglSync.SpesnetApi/SpesnetTogglSync.SpesnetApi.csproj" />
   <Project Path="SpesnetTogglSync/SpesnetTogglSync.csproj" />
 </Solution>

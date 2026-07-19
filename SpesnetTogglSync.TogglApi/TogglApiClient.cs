@@ -1,34 +1,29 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
+using SpesnetTogglSync.Logging;
 using SpesnetTogglSync.Models;
 
-namespace SpesnetTogglSync.Services;
+namespace SpesnetTogglSync.TogglApi;
 
-public class TogglApiClient : ITogglClient, IDisposable
+public class TogglApiClient : ITogglClient
 {
-    private const string BaseUrl = "https://api.track.toggl.com/api/v9";
-    private readonly HttpClient _httpClient;
-    private readonly FileLogger _logger;
+    private readonly TogglApiHttp _http;
+    private readonly IApiLogger _logger;
 
-    public TogglApiClient(string apiToken, FileLogger logger)
+    public TogglApiClient(string apiToken, IApiLogger logger)
     {
         _logger = logger;
-        _httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(BaseUrl)
-        };
-
-        var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{apiToken}:api_token"));
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+        _http = new TogglApiHttp(TogglApiHttp.CreateHttpClient(apiToken), logger);
     }
 
     public async Task<TogglMe> GetMeAsync(CancellationToken cancellationToken = default)
     {
         _logger.Info("Toggl: fetching /me");
-        var response = await _httpClient.GetAsync("/me", cancellationToken);
-        await EnsureSuccessAsync(response, "fetch user profile");
+        var response = await _http.SendAsync(
+            "fetch user profile",
+            HttpMethod.Get,
+            "/me",
+            cancellationToken: cancellationToken);
         var me = await response.Content.ReadFromJsonAsync<TogglMe>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Toggl /me returned empty response.");
         return me;
@@ -37,16 +32,22 @@ public class TogglApiClient : ITogglClient, IDisposable
     public async Task<IReadOnlyList<TogglClient>> GetClientsAsync(long workspaceId, CancellationToken cancellationToken = default)
     {
         _logger.Info($"Toggl: fetching clients for workspace {workspaceId}");
-        var response = await _httpClient.GetAsync($"/workspaces/{workspaceId}/clients", cancellationToken);
-        await EnsureSuccessAsync(response, "fetch clients");
+        var response = await _http.SendAsync(
+            "fetch clients",
+            HttpMethod.Get,
+            $"/workspaces/{workspaceId}/clients",
+            cancellationToken: cancellationToken);
         return await ReadItemsAsync<TogglClient>(response, cancellationToken);
     }
 
     public async Task<IReadOnlyList<TogglProject>> GetProjectsAsync(long workspaceId, CancellationToken cancellationToken = default)
     {
         _logger.Info($"Toggl: fetching projects for workspace {workspaceId}");
-        var response = await _httpClient.GetAsync($"/workspaces/{workspaceId}/projects", cancellationToken);
-        await EnsureSuccessAsync(response, "fetch projects");
+        var response = await _http.SendAsync(
+            "fetch projects",
+            HttpMethod.Get,
+            $"/workspaces/{workspaceId}/projects",
+            cancellationToken: cancellationToken);
         return await ReadItemsAsync<TogglProject>(response, cancellationToken);
     }
 
@@ -55,8 +56,11 @@ public class TogglApiClient : ITogglClient, IDisposable
         var startDate = sinceUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
         var url = $"/me/time_entries?start_date={Uri.EscapeDataString(startDate)}&meta=true";
         _logger.Info($"Toggl: fetching time entries since {startDate}");
-        var response = await _httpClient.GetAsync(url, cancellationToken);
-        await EnsureSuccessAsync(response, "fetch time entries");
+        var response = await _http.SendAsync(
+            "fetch time entries",
+            HttpMethod.Get,
+            url,
+            cancellationToken: cancellationToken);
         var entries = await response.Content.ReadFromJsonAsync<List<TogglTimeEntry>>(cancellationToken: cancellationToken)
             ?? [];
 
@@ -83,18 +87,5 @@ public class TogglApiClient : ITogglClient, IDisposable
         return [];
     }
 
-    private async Task EnsureSuccessAsync(HttpResponseMessage response, string operation)
-    {
-        if (response.IsSuccessStatusCode)
-        {
-            return;
-        }
-
-        var body = await response.Content.ReadAsStringAsync();
-        var message = $"Toggl failed to {operation}: {(int)response.StatusCode} {response.ReasonPhrase}. {body}";
-        _logger.Error(message);
-        throw new HttpRequestException(message);
-    }
-
-    public void Dispose() => _httpClient.Dispose();
+    public void Dispose() => _http.Dispose();
 }

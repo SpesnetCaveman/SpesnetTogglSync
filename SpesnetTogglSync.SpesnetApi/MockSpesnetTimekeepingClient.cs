@@ -1,14 +1,15 @@
 using System.Text.Json;
+using SpesnetTogglSync.Logging;
 using SpesnetTogglSync.Models;
 
-namespace SpesnetTogglSync.Services;
+namespace SpesnetTogglSync.SpesnetApi;
 
 public class MockSpesnetTimekeepingClient : ISpesnetTimekeepingClient
 {
-    private readonly FileLogger _logger;
+    private readonly IApiLogger _logger;
     private readonly SpesnetReferenceCache _referenceCache;
 
-    public MockSpesnetTimekeepingClient(FileLogger logger)
+    public MockSpesnetTimekeepingClient(IApiLogger logger)
     {
         _logger = logger;
         _referenceCache = LoadReferenceData();

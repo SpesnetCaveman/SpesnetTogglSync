@@ -1,6 +1,8 @@
+using SpesnetTogglSync.Logging;
+
 namespace SpesnetTogglSync.Services;
 
-public class FileLogger
+public class FileLogger : IApiLogger
 {
     private readonly string _logDirectory;
     private readonly object _lock = new();

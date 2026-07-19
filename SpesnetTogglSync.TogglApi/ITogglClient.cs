@@ -1,6 +1,6 @@
 using SpesnetTogglSync.Models;
 
-namespace SpesnetTogglSync.Services;
+namespace SpesnetTogglSync.TogglApi;
 
 public interface ITogglClient : IDisposable
 {

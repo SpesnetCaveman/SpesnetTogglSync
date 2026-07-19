@@ -1,30 +1,21 @@
-using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
+using SpesnetTogglSync.Logging;
 using SpesnetTogglSync.Models;
 
-namespace SpesnetTogglSync.Services;
+namespace SpesnetTogglSync.SpesnetApi;
 
-public class SpesnetTimekeepingClient : ISpesnetTimekeepingClient, IDisposable
+public class SpesnetTimekeepingClient : ISpesnetTimekeepingClient
 {
-    private readonly HttpClient _httpClient;
+    private readonly SpesnetApiHttp _http;
     private readonly AppSettings _settings;
-    private readonly FileLogger _logger;
+    private readonly IApiLogger _logger;
     private int _employeeId;
 
-    public SpesnetTimekeepingClient(AppSettings settings, FileLogger logger)
+    public SpesnetTimekeepingClient(AppSettings settings, IApiLogger logger)
     {
         _settings = settings;
         _logger = logger;
-        var handler = new HttpClientHandler
-        {
-            CookieContainer = new CookieContainer(),
-            UseCookies = true
-        };
-        _httpClient = new HttpClient(handler)
-        {
-            BaseAddress = new Uri(NormalizeDomain(settings.SpesnetDomain))
-        };
+        _http = new SpesnetApiHttp(SpesnetApiHttp.CreateHttpClient(settings.SpesnetDomain), logger);
     }
 
     public async Task LoginAsync(CancellationToken cancellationToken = default)
@@ -37,20 +28,23 @@ public class SpesnetTimekeepingClient : ISpesnetTimekeepingClient, IDisposable
             RememberMe = false
         };
 
-        var response = await _httpClient.PostAsJsonAsync("api/Account/Login", payload, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"Spesnet login failed: {(int)response.StatusCode}. {body}");
-        }
+        await _http.SendAsync(
+            "login",
+            HttpMethod.Post,
+            "api/Account/Login",
+            payload,
+            cancellationToken);
 
         _logger.Info("Spesnet: login successful");
     }
 
     public async Task<SpesnetUserInfo> GetUserInfoAsync(CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.GetAsync("api/User/GetUserInfo", cancellationToken);
-        await EnsureSuccessAsync(response, "get user info");
+        var response = await _http.SendAsync(
+            "get user info",
+            HttpMethod.Get,
+            "api/User/GetUserInfo",
+            cancellationToken: cancellationToken);
         return await response.Content.ReadFromJsonAsync<SpesnetUserInfo>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Spesnet user info was empty.");
     }
@@ -64,8 +58,11 @@ public class SpesnetTimekeepingClient : ISpesnetTimekeepingClient, IDisposable
 
         var workDate = DateTime.Now.ToString("ddd MMM dd yyyy");
         var url = $"api/employee/GetEmployeeByDate?workDate={Uri.EscapeDataString(workDate)}";
-        var response = await _httpClient.GetAsync(url, cancellationToken);
-        await EnsureSuccessAsync(response, "get employee by date");
+        var response = await _http.SendAsync(
+            "get employee by date",
+            HttpMethod.Get,
+            url,
+            cancellationToken: cancellationToken);
         var employeeResponse = await response.Content.ReadFromJsonAsync<SpesnetEmployeeResponse>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("Spesnet employee response was empty.");
         _employeeId = employeeResponse.CurrentUser?.Id
@@ -76,31 +73,44 @@ public class SpesnetTimekeepingClient : ISpesnetTimekeepingClient, IDisposable
 
     public async Task<IReadOnlyList<SpesnetProject>> GetProjectsForEmployeeAsync(int employeeId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.GetAsync($"api/Project/GetProjectForEmployee?employeeId={employeeId}", cancellationToken);
-        await EnsureSuccessAsync(response, "get projects for employee");
+        var response = await _http.SendAsync(
+            "get projects for employee",
+            HttpMethod.Get,
+            $"api/Project/GetProjectForEmployee?employeeId={employeeId}",
+            cancellationToken: cancellationToken);
         return await response.Content.ReadFromJsonAsync<List<SpesnetProject>>(cancellationToken: cancellationToken) ?? [];
     }
 
     public async Task<IReadOnlyList<SpesnetClient>> GetClientsByProjectAsync(int projectId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.GetAsync($"api/Client/GetClientsByProject?projectId={projectId}", cancellationToken);
-        await EnsureSuccessAsync(response, "get clients by project");
+        var response = await _http.SendAsync(
+            "get clients by project",
+            HttpMethod.Get,
+            $"api/Client/GetClientsByProject?projectId={projectId}",
+            cancellationToken: cancellationToken);
         var payload = await response.Content.ReadFromJsonAsync<SpesnetClientsByProjectResponse>(cancellationToken: cancellationToken);
         return payload?.Clients ?? [];
     }
 
     public async Task<IReadOnlyList<SpesnetWorkTask>> GetWorkTasksAsync(CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.GetAsync("api/worktask", cancellationToken);
-        await EnsureSuccessAsync(response, "get work tasks");
+        var response = await _http.SendAsync(
+            "get work tasks",
+            HttpMethod.Get,
+            "api/worktask",
+            cancellationToken: cancellationToken);
         return await response.Content.ReadFromJsonAsync<List<SpesnetWorkTask>>(cancellationToken: cancellationToken) ?? [];
     }
 
     public async Task SaveWorkEntriesAsync(SpesnetSaveWorkRequest request, CancellationToken cancellationToken = default)
     {
         _logger.Info($"Spesnet: saving {request.WorkDoneList.Count} work entries");
-        var response = await _httpClient.PostAsJsonAsync("api/worktask/save", request, cancellationToken);
-        await EnsureSuccessAsync(response, "save work entries");
+        await _http.SendAsync(
+            "save work entries",
+            HttpMethod.Post,
+            "api/worktask/save",
+            request,
+            cancellationToken);
     }
 
     public async Task<SpesnetReferenceCache> RefreshReferenceDataAsync(CancellationToken cancellationToken = default)
@@ -126,29 +136,5 @@ public class SpesnetTimekeepingClient : ISpesnetTimekeepingClient, IDisposable
         };
     }
 
-    private async Task EnsureSuccessAsync(HttpResponseMessage response, string operation)
-    {
-        if (response.IsSuccessStatusCode)
-        {
-            return;
-        }
-
-        var body = await response.Content.ReadAsStringAsync();
-        var message = $"Spesnet failed to {operation}: {(int)response.StatusCode} {response.ReasonPhrase}. {body}";
-        _logger.Error(message);
-        throw new HttpRequestException(message);
-    }
-
-    private static string NormalizeDomain(string domain)
-    {
-        var normalized = domain.Trim();
-        if (!normalized.EndsWith('/'))
-        {
-            normalized += "/";
-        }
-
-        return normalized;
-    }
-
-    public void Dispose() => _httpClient.Dispose();
+    public void Dispose() => _http.Dispose();
 }

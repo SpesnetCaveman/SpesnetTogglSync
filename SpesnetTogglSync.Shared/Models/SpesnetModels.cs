@@ -80,7 +80,7 @@ public class SpesnetClient
 public class SpesnetClientsByProjectResponse
 {
     [JsonPropertyName("defaultProjectID")]
-    public int DefaultProjectId { get; set; }
+    public int? DefaultProjectId { get; set; }
 
     [JsonPropertyName("clients")]
     public List<SpesnetClient> Clients { get; set; } = [];

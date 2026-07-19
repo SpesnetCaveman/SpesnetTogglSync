@@ -1,5 +1,7 @@
 ﻿using SpesnetTogglSync.Models;
 using SpesnetTogglSync.Services;
+using SpesnetTogglSync.SpesnetApi;
+using SpesnetTogglSync.TogglApi;
 
 namespace SpesnetTogglSync;
 
@@ -138,9 +140,9 @@ public partial class SyncForm : Form
         }
         finally
         {
-            if (disposeClient && togglClient is TogglApiClient concrete)
+            if (disposeClient)
             {
-                concrete.Dispose();
+                togglClient.Dispose();
             }
         }
     }
@@ -415,6 +417,7 @@ public partial class SyncForm : Form
         }
         catch (Exception ex)
         {
+            _logger.Error(ex.Message);
             MessageBox.Show(this, ex.Message, "Spesnet Refresh Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally

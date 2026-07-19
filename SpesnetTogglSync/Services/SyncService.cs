@@ -1,4 +1,6 @@
 using SpesnetTogglSync.Models;
+using SpesnetTogglSync.SpesnetApi;
+using SpesnetTogglSync.TogglApi;
 
 namespace SpesnetTogglSync.Services;
 

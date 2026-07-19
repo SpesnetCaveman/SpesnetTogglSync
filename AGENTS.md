@@ -8,6 +8,15 @@ A **.NET 10 WinForms** personal tool that syncs **Toggl Track** time entries int
 
 Primary entry: `SpesnetTogglSync/SyncForm.cs` → `Services/SyncService.cs`.
 
+Solution projects:
+
+| Project | Role |
+|---------|------|
+| `SpesnetTogglSync` | WinForms UI, `SyncService`, `ConfigService`, `FileLogger` |
+| `SpesnetTogglSync.Shared` | Models + `IApiLogger` |
+| `SpesnetTogglSync.TogglApi` | Toggl Track HTTP library |
+| `SpesnetTogglSync.SpesnetApi` | Spesnet HTTP library (real + mock) |
+
 ## Domain mapping (do not invent alternate mappings)
 
 - Toggl **client** → Spesnet **project id + client id** (clients are loaded per project via `GetClientsByProject`).
@@ -26,19 +35,33 @@ Primary entry: `SpesnetTogglSync/SyncForm.cs` → `Services/SyncService.cs`.
 6. **Minimize Toggl calls**: sync uses `GET /me/time_entries?start_date=&meta=true`. Clients/projects fetch only for mapping UI refresh.
 7. **Mock by default**: `UseMockSpesnet: true` → `MockSpesnetTimekeepingClient`. Real client uses cookie login. Prefer keeping both behind `ISpesnetTimekeepingClient`.
 
+## Central API failure breakpoints
+
+Every live HTTP call goes through one transport per integration. Failures (non-success status or transport exception) hit a single gate:
+
+| Integration | Class | Method |
+|-------------|-------|--------|
+| Toggl | `TogglApi/TogglApiHttp.cs` | `OnFailedResponse` |
+| Spesnet | `SpesnetApi/SpesnetApiHttp.cs` | `OnFailedResponse` |
+
+When a debugger is attached, `Debugger.Break()` runs there. Inspect locals: `operation`, `requestUrl`, `requestPayload`, `response`, `rawResponse`, `exception`. Do **not** add per-endpoint breakpoints for API error inspection — extend these gates instead.
+
 ## Key files
 
 | Path | Role |
 |------|------|
-| `SyncForm.cs` / `SyncForm.Designer.cs` | UI: sync bar, tabs (log, clients, mappings, settings) |
-| `Services/SyncService.cs` | Orchestration, validation, transform, watermark |
-| `Services/TogglApiClient.cs` | Toggl Track API v9 (token auth) |
-| `Services/SpesnetTimekeepingClient.cs` | Real Spesnet HTTP + cookies |
-| `Services/MockSpesnetTimekeepingClient.cs` | Local test double |
-| `Services/ConfigService.cs` | `appsettings.json`, `syncstate.json`, `mappings.json` |
-| `Services/FileLogger.cs` | `logs/sync-YYYYMMDD.log` + UI events |
-| `Data/mock-spesnet-reference.json` | Mock projects/clients/tasks |
-| `appsettings.example.json` | Template without secrets |
+| `SpesnetTogglSync/SyncForm.cs` | UI: sync bar, tabs (log, clients, mappings, settings) |
+| `SpesnetTogglSync/Services/SyncService.cs` | Orchestration, validation, transform, watermark |
+| `SpesnetTogglSync.TogglApi/TogglApiClient.cs` | Toggl Track API v9 (token auth) |
+| `SpesnetTogglSync.TogglApi/TogglApiHttp.cs` | Central Toggl send + failure breakpoint |
+| `SpesnetTogglSync.SpesnetApi/SpesnetTimekeepingClient.cs` | Real Spesnet HTTP + cookies |
+| `SpesnetTogglSync.SpesnetApi/SpesnetApiHttp.cs` | Central Spesnet send + failure breakpoint |
+| `SpesnetTogglSync.SpesnetApi/MockSpesnetTimekeepingClient.cs` | Local test double |
+| `SpesnetTogglSync/Services/ConfigService.cs` | `appsettings.json`, `syncstate.json`, `mappings.json` |
+| `SpesnetTogglSync/Services/FileLogger.cs` | `logs/sync-YYYYMMDD.log` + UI events (`IApiLogger`) |
+| `SpesnetTogglSync.Shared/Models/` | Shared DTOs and settings |
+| `SpesnetTogglSync/Data/mock-spesnet-reference.json` | Mock projects/clients/tasks |
+| `SpesnetTogglSync/appsettings.example.json` | Template without secrets |
 
 ## Spesnet API surface (real)
 
@@ -54,7 +77,7 @@ Primary entry: `SpesnetTogglSync/SyncForm.cs` → `Services/SyncService.cs`.
 
 ## Naming collision
 
-Model `Models.TogglClient` vs HTTP helper `Services.TogglApiClient`. Do **not** rename the HTTP class back to `TogglClient`.
+Model `Models.TogglClient` vs HTTP helper `TogglApi.TogglApiClient`. Do **not** rename the HTTP class back to `TogglClient`.
 
 ## Secrets and git
 
@@ -66,3 +89,4 @@ Never commit `appsettings.json`, `syncstate.json`, `mappings.json`, or `logs/`. 
 - Prefer `HttpClient` + `System.Text.Json` / `System.Net.Http.Json` already in use — avoid new NuGet packages unless necessary.
 - Keep UI logic in the form thin; business rules in `SyncService` / clients.
 - Do not remove mock mode when adding Spesnet features — extend both implementations of the interface.
+- Route all new live Spesnet/Toggl HTTP through `SpesnetApiHttp` / `TogglApiHttp.SendAsync` so the central failure breakpoint still covers them.
