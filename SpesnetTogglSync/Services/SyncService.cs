@@ -128,14 +128,8 @@ public class SyncService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var clientMapping = mappings.ClientMappings.First(m =>
-                m.TogglClientId == entry.ClientId!.Value ||
-                string.Equals(m.TogglClientName, entry.ClientName, StringComparison.OrdinalIgnoreCase));
-            var projectMapping = mappings.ProjectMappings.First(m =>
-                m.TogglProjectId == entry.ProjectId!.Value ||
-                string.Equals(m.TogglProjectName, entry.ProjectName, StringComparison.OrdinalIgnoreCase));
-
-            var workDoneEntries = TransformEntry(entry, employeeId, clientMapping, projectMapping);
+            var mapping = FindEntryMapping(mappings, entry)!;
+            var workDoneEntries = TransformEntry(entry, employeeId, mapping);
             var request = new SpesnetSaveWorkRequest { WorkDoneList = workDoneEntries };
 
             Report($"Syncing Toggl entry {entry.Id} ({entry.StartUtc:yyyy-MM-dd HH:mm})...");
@@ -169,47 +163,50 @@ public class SyncService
     {
         foreach (var entry in entries)
         {
-            var clientMapping = mappings.ClientMappings.FirstOrDefault(m =>
-                m.TogglClientId == entry.ClientId!.Value ||
-                string.Equals(m.TogglClientName, entry.ClientName, StringComparison.OrdinalIgnoreCase));
-            if (clientMapping == null)
+            var mapping = FindEntryMapping(mappings, entry);
+            if (mapping == null)
             {
-                return $"Missing client mapping for Toggl client '{entry.ClientName}'. Configure it on the Client Mapping tab.";
+                return $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}'. Configure it on the Mapping tab.";
             }
 
-            if (!referenceCache.Projects.Any(p => p.Id == clientMapping.SpesnetProjectId))
+            if (!referenceCache.Projects.Any(p => p.Id == mapping.SpesnetProjectId))
             {
-                return $"Mapped Spesnet project id {clientMapping.SpesnetProjectId} for Toggl client '{entry.ClientName}' was not found.";
+                return $"Mapped Spesnet project id {mapping.SpesnetProjectId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found.";
             }
 
-            if (!referenceCache.ClientsByProject.TryGetValue(clientMapping.SpesnetProjectId, out var clients) ||
-                clients.All(c => c.Id != clientMapping.SpesnetClientId))
+            if (!referenceCache.ClientsByProject.TryGetValue(mapping.SpesnetProjectId, out var clients) ||
+                clients.All(c => c.Id != mapping.SpesnetClientId))
             {
-                return $"Mapped Spesnet client id {clientMapping.SpesnetClientId} for Toggl client '{entry.ClientName}' was not found for project {clientMapping.SpesnetProjectId}.";
+                return $"Mapped Spesnet client id {mapping.SpesnetClientId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found for project {mapping.SpesnetProjectId}.";
             }
 
-            var projectMapping = mappings.ProjectMappings.FirstOrDefault(m =>
-                m.TogglProjectId == entry.ProjectId!.Value ||
-                string.Equals(m.TogglProjectName, entry.ProjectName, StringComparison.OrdinalIgnoreCase));
-            if (projectMapping == null)
+            if (!referenceCache.WorkTasks.Any(w => w.Id == mapping.SpesnetWorkTaskId))
             {
-                return $"Missing project mapping for Toggl project '{entry.ProjectName}'. Configure it on the Project Mapping tab.";
-            }
-
-            if (!referenceCache.WorkTasks.Any(w => w.Id == projectMapping.SpesnetWorkTaskId))
-            {
-                return $"Mapped Spesnet work task id {projectMapping.SpesnetWorkTaskId} for Toggl project '{entry.ProjectName}' was not found.";
+                return $"Mapped Spesnet work task id {mapping.SpesnetWorkTaskId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found.";
             }
         }
 
         return null;
     }
 
+    private static EntryMapping? FindEntryMapping(UserMappings mappings, TogglTimeEntry entry)
+    {
+        return mappings.EntryMappings.FirstOrDefault(m =>
+            MatchesTogglClient(m, entry) && MatchesTogglProject(m, entry));
+    }
+
+    private static bool MatchesTogglClient(EntryMapping mapping, TogglTimeEntry entry) =>
+        mapping.TogglClientId == entry.ClientId!.Value ||
+        string.Equals(mapping.TogglClientName, entry.ClientName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesTogglProject(EntryMapping mapping, TogglTimeEntry entry) =>
+        mapping.TogglProjectId == entry.ProjectId!.Value ||
+        string.Equals(mapping.TogglProjectName, entry.ProjectName, StringComparison.OrdinalIgnoreCase);
+
     private static List<SpesnetWorkDoneEntry> TransformEntry(
         TogglTimeEntry entry,
         int employeeId,
-        ClientMapping clientMapping,
-        ProjectMapping projectMapping)
+        EntryMapping mapping)
     {
         var totalHours = entry.Duration / 3600.0;
         var remaining = totalHours;
@@ -226,10 +223,10 @@ public class SyncService
                 EmployeeId = employeeId,
                 NormalHours = chunkHours,
                 OvertimeHours = 0,
-                ProjectId = clientMapping.SpesnetProjectId,
-                ClientId = clientMapping.SpesnetClientId,
+                ProjectId = mapping.SpesnetProjectId,
+                ClientId = mapping.SpesnetClientId,
                 TxDateTime = txDateTime,
-                WorkTaskId = projectMapping.SpesnetWorkTaskId
+                WorkTaskId = mapping.SpesnetWorkTaskId
             });
             remaining -= chunkHours;
         }

@@ -173,19 +173,16 @@ public partial class SyncForm : Form
     private void LoadMappingsIntoUi()
     {
         var userMappings = GetCurrentUserMappings();
-        ClientMappingGrid.Rows.Clear();
-        foreach (var mapping in userMappings.ClientMappings)
+        MappingGrid.Rows.Clear();
+        foreach (var mapping in userMappings.EntryMappings)
         {
-            ClientMappingGrid.Rows.Add(mapping.TogglClientName, mapping.SpesnetProjectId, mapping.SpesnetClientId);
-            var row = ClientMappingGrid.Rows[^1];
-            row.Tag = mapping;
-        }
-
-        ProjectMappingGrid.Rows.Clear();
-        foreach (var mapping in userMappings.ProjectMappings)
-        {
-            ProjectMappingGrid.Rows.Add(mapping.TogglProjectName, mapping.SpesnetWorkTaskId);
-            ProjectMappingGrid.Rows[^1].Tag = mapping;
+            MappingGrid.Rows.Add(
+                mapping.TogglClientName,
+                mapping.TogglProjectName,
+                mapping.SpesnetProjectId,
+                mapping.SpesnetClientId,
+                mapping.SpesnetWorkTaskId);
+            MappingGrid.Rows[^1].Tag = mapping;
         }
 
         RefreshMappingGridSources();
@@ -206,8 +203,8 @@ public partial class SyncForm : Form
             });
         }
 
-        userMappings.ClientMappings = [];
-        foreach (DataGridViewRow row in ClientMappingGrid.Rows)
+        userMappings.EntryMappings = [];
+        foreach (DataGridViewRow row in MappingGrid.Rows)
         {
             if (row.IsNewRow)
             {
@@ -215,47 +212,33 @@ public partial class SyncForm : Form
             }
 
             var togglClientName = Convert.ToString(row.Cells[TogglClientColumn.Index].Value) ?? string.Empty;
+            var togglProjectName = Convert.ToString(row.Cells[TogglProjectColumn.Index].Value) ?? string.Empty;
             var togglClient = _togglClients.FirstOrDefault(c =>
                 string.Equals(c.Name, togglClientName, StringComparison.OrdinalIgnoreCase));
+            var togglProject = _togglProjects.FirstOrDefault(p =>
+                string.Equals(p.Name, togglProjectName, StringComparison.OrdinalIgnoreCase));
             var projectId = GetSelectedId(row.Cells[SpesnetProjectColumn.Index].Value);
             var clientId = GetSelectedId(row.Cells[SpesnetClientColumn.Index].Value);
-            if (string.IsNullOrWhiteSpace(togglClientName) || projectId == 0 || clientId == 0)
+            var workTaskId = GetSelectedId(row.Cells[SpesnetWorkTaskColumn.Index].Value);
+            if (string.IsNullOrWhiteSpace(togglClientName) ||
+                string.IsNullOrWhiteSpace(togglProjectName) ||
+                projectId == 0 ||
+                clientId == 0 ||
+                workTaskId == 0)
             {
                 continue;
             }
 
-            userMappings.ClientMappings.Add(new ClientMapping
+            userMappings.EntryMappings.Add(new EntryMapping
             {
                 TogglClientId = togglClient?.Id ?? 0,
                 TogglClientName = togglClientName,
+                TogglProjectId = togglProject?.Id ?? 0,
+                TogglProjectName = togglProjectName,
                 SpesnetProjectId = projectId,
                 SpesnetProjectName = GetProjectName(projectId),
                 SpesnetClientId = clientId,
-                SpesnetClientName = GetClientName(projectId, clientId)
-            });
-        }
-
-        userMappings.ProjectMappings = [];
-        foreach (DataGridViewRow row in ProjectMappingGrid.Rows)
-        {
-            if (row.IsNewRow)
-            {
-                continue;
-            }
-
-            var togglProjectName = Convert.ToString(row.Cells[TogglProjectColumn.Index].Value) ?? string.Empty;
-            var togglProject = _togglProjects.FirstOrDefault(p =>
-                string.Equals(p.Name, togglProjectName, StringComparison.OrdinalIgnoreCase));
-            var workTaskId = GetSelectedId(row.Cells[SpesnetWorkTaskColumn.Index].Value);
-            if (string.IsNullOrWhiteSpace(togglProjectName) || workTaskId == 0)
-            {
-                continue;
-            }
-
-            userMappings.ProjectMappings.Add(new ProjectMapping
-            {
-                TogglProjectId = togglProject?.Id ?? 0,
-                TogglProjectName = togglProjectName,
+                SpesnetClientName = GetClientName(projectId, clientId),
                 SpesnetWorkTaskId = workTaskId,
                 SpesnetWorkTaskName = GetWorkTaskName(workTaskId)
             });
@@ -280,7 +263,7 @@ public partial class SyncForm : Form
         SetComboColumnDataSource(SpesnetProjectColumn, projectItems);
         SetComboColumnDataSource(SpesnetWorkTaskColumn, workTaskItems);
 
-        foreach (DataGridViewRow row in ClientMappingGrid.Rows)
+        foreach (DataGridViewRow row in MappingGrid.Rows)
         {
             if (!row.IsNewRow)
             {
@@ -293,7 +276,7 @@ public partial class SyncForm : Form
     {
         column.DataSource = null;
         column.DataSource = dataSource;
-        if (dataSource is ComboItem[] comboItems)
+        if (dataSource is ComboItem[])
         {
             column.DisplayMember = nameof(ComboItem.Name);
             column.ValueMember = nameof(ComboItem.Id);
@@ -302,18 +285,16 @@ public partial class SyncForm : Form
 
     private void InitializeMappingGrids()
     {
-        ClientMappingGrid.AutoGenerateColumns = false;
-        ClientMappingGrid.Columns.Add(TogglClientColumn);
-        ClientMappingGrid.Columns.Add(SpesnetProjectColumn);
-        ClientMappingGrid.Columns.Add(SpesnetClientColumn);
+        MappingGrid.AutoGenerateColumns = false;
+        MappingGrid.Columns.Add(TogglClientColumn);
+        MappingGrid.Columns.Add(TogglProjectColumn);
+        MappingGrid.Columns.Add(SpesnetProjectColumn);
+        MappingGrid.Columns.Add(SpesnetClientColumn);
+        MappingGrid.Columns.Add(SpesnetWorkTaskColumn);
 
-        ProjectMappingGrid.AutoGenerateColumns = false;
-        ProjectMappingGrid.Columns.Add(TogglProjectColumn);
-        ProjectMappingGrid.Columns.Add(SpesnetWorkTaskColumn);
-
-        ClientMappingGrid.EditingControlShowing += ClientMappingGrid_EditingControlShowing;
-        ClientMappingGrid.CellValueChanged += ClientMappingGrid_CellValueChanged;
-        ClientMappingGrid.CurrentCellDirtyStateChanged += MappingGrid_CurrentCellDirtyStateChanged;
+        MappingGrid.EditingControlShowing += MappingGrid_EditingControlShowing;
+        MappingGrid.CellValueChanged += MappingGrid_CellValueChanged;
+        MappingGrid.CurrentCellDirtyStateChanged += MappingGrid_CurrentCellDirtyStateChanged;
     }
 
     private void MappingGrid_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
@@ -324,9 +305,9 @@ public partial class SyncForm : Form
         }
     }
 
-    private void ClientMappingGrid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
+    private void MappingGrid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
     {
-        if (ClientMappingGrid.CurrentCell?.OwningColumn != SpesnetProjectColumn)
+        if (MappingGrid.CurrentCell?.OwningColumn != SpesnetProjectColumn)
         {
             return;
         }
@@ -340,22 +321,22 @@ public partial class SyncForm : Form
 
     private void SpesnetProjectCombo_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        if (ClientMappingGrid.CurrentRow == null)
+        if (MappingGrid.CurrentRow == null)
         {
             return;
         }
 
-        UpdateClientComboForRow(ClientMappingGrid.CurrentRow);
+        UpdateClientComboForRow(MappingGrid.CurrentRow);
     }
 
-    private void ClientMappingGrid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+    private void MappingGrid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex != SpesnetProjectColumn.Index)
         {
             return;
         }
 
-        UpdateClientComboForRow(ClientMappingGrid.Rows[e.RowIndex]);
+        UpdateClientComboForRow(MappingGrid.Rows[e.RowIndex]);
     }
 
     private void UpdateClientComboForRow(DataGridViewRow row)

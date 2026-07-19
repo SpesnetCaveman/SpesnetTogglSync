@@ -19,8 +19,8 @@ Solution projects:
 
 ## Domain mapping (do not invent alternate mappings)
 
-- Toggl **client** → Spesnet **project id + client id** (clients are loaded per project via `GetClientsByProject`).
-- Toggl **project** → Spesnet **work task id**.
+- One **entry mapping** matches on Toggl **client + project** together and sets Spesnet **project id + client id + work task id**.
+- Spesnet clients are loaded per project via `GetClientsByProject` (project first).
 - Toggl **description** → Spesnet **comment**.
 - Sync only for the **current Toggl user**; mappings are stored **per Toggl user id** in `mappings.json`.
 - Spesnet hierarchy in APIs differs from Toggl: employee → projects → clients-by-project; work tasks are a separate list.

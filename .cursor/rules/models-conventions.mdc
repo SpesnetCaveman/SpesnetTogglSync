@@ -10,4 +10,5 @@ alwaysApply: false
 - Local persistence (`AppSettings`, `SyncState`, `MappingsFile`) uses `ConfigService` camelCase serialization — keep property names readable C#.
 - `SpesnetReferenceCache` may live inside `AppSettings`; keep `ClientsByProject` keyed by Spesnet project id.
 - Per-user sync config lives under `MappingsFile.Users[togglUserId]`.
+- Entry mappings are `UserMappings.EntryMappings` (Toggl client + project → full Spesnet destination); do not reintroduce separate client/project mapping lists.
 - Do not store secrets in models beyond what `AppSettings` already holds; never add secrets to committed examples.

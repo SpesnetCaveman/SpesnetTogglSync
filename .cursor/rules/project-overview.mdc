@@ -13,8 +13,7 @@ WinForms (.NET 10) app that syncs **Toggl Track** → **Spesnet/EvolveMed Timeke
 
 ## Mapping (required)
 
-- Toggl client → Spesnet **project + client**
-- Toggl project → Spesnet **work task**
+- One entry mapping: Toggl **client + project** → Spesnet **project + client + work task**
 - Toggl description → Spesnet **comment**
 
 Spesnet clients: `GET api/Client/GetClientsByProject?projectId=` (project first).

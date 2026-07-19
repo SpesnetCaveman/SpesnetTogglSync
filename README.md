@@ -14,21 +14,22 @@ dotnet run --project SpesnetTogglSync\SpesnetTogglSync.csproj
 
 1. **Settings** — paste your Toggl API token (profile → API token). Keep **Use mock Spesnet** checked for local testing.
 2. **Toggl Clients** — Refresh from Toggl, check which clients to sync.
-3. **Client Mapping** / **Project Mapping** — map Toggl entities to Spesnet.
+3. **Mapping** — each row maps a Toggl client + project to Spesnet project, client, and work task.
 4. Set **Sync from**, click **Start Sync**. Watch **Sync Log**.
 
 Production: uncheck mock mode, enter Spesnet credentials, click **Refresh Spesnet Reference Data**, then sync.
 
 ## Mapping model
 
+One **entry mapping** row defines the full destination for a Toggl client + project pair:
+
 | Toggl | Spesnet |
 |-------|---------|
-| Client | Project **+** Client |
-| Project | Work task |
+| Client + Project | Project + Client + Work task |
 | Description | Comment |
 
 - Only checked Toggl clients are synced.
-- Entries missing client/project, or with unmapped entities, **abort the sync** with a clear message (no partial writes after validation fails).
+- Entries missing client/project, or with no matching entry mapping, **abort the sync** with a clear message (no partial writes after validation fails).
 - Entries longer than 8 hours are split into ≤8h chunks (all `normalHours`).
 
 ## Runtime files (gitignored)

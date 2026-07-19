@@ -27,10 +27,8 @@
             togglClientsTabPage = new TabPage();
             RefreshTogglButton = new Button();
             TogglClientsCheckedListBox = new CheckedListBox();
-            clientMappingTabPage = new TabPage();
-            ClientMappingGrid = new DataGridView();
-            projectMappingTabPage = new TabPage();
-            ProjectMappingGrid = new DataGridView();
+            mappingTabPage = new TabPage();
+            MappingGrid = new DataGridView();
             settingsTabPage = new TabPage();
             SaveSettingsButton = new Button();
             RefreshSpesnetButton = new Button();
@@ -45,18 +43,16 @@
             TogglApiTokenTextBox = new TextBox();
             togglApiTokenLabel = new Label();
             TogglClientColumn = new DataGridViewComboBoxColumn();
+            TogglProjectColumn = new DataGridViewComboBoxColumn();
             SpesnetProjectColumn = new DataGridViewComboBoxColumn();
             SpesnetClientColumn = new DataGridViewComboBoxColumn();
-            TogglProjectColumn = new DataGridViewComboBoxColumn();
             SpesnetWorkTaskColumn = new DataGridViewComboBoxColumn();
             topPanel.SuspendLayout();
             mainTabControl.SuspendLayout();
             logTabPage.SuspendLayout();
             togglClientsTabPage.SuspendLayout();
-            clientMappingTabPage.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)ClientMappingGrid).BeginInit();
-            projectMappingTabPage.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)ProjectMappingGrid).BeginInit();
+            mappingTabPage.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)MappingGrid).BeginInit();
             settingsTabPage.SuspendLayout();
             SuspendLayout();
             // 
@@ -128,8 +124,7 @@
             // 
             mainTabControl.Controls.Add(logTabPage);
             mainTabControl.Controls.Add(togglClientsTabPage);
-            mainTabControl.Controls.Add(clientMappingTabPage);
-            mainTabControl.Controls.Add(projectMappingTabPage);
+            mainTabControl.Controls.Add(mappingTabPage);
             mainTabControl.Controls.Add(settingsTabPage);
             mainTabControl.Dock = DockStyle.Fill;
             mainTabControl.Location = new Point(0, 72);
@@ -193,45 +188,25 @@
             TogglClientsCheckedListBox.Size = new Size(954, 378);
             TogglClientsCheckedListBox.TabIndex = 0;
             // 
-            // clientMappingTabPage
+            // mappingTabPage
             // 
-            clientMappingTabPage.Controls.Add(ClientMappingGrid);
-            clientMappingTabPage.Location = new Point(4, 29);
-            clientMappingTabPage.Name = "clientMappingTabPage";
-            clientMappingTabPage.Padding = new Padding(8);
-            clientMappingTabPage.Size = new Size(976, 456);
-            clientMappingTabPage.TabIndex = 2;
-            clientMappingTabPage.Text = "Client Mapping";
-            clientMappingTabPage.UseVisualStyleBackColor = true;
+            mappingTabPage.Controls.Add(MappingGrid);
+            mappingTabPage.Location = new Point(4, 29);
+            mappingTabPage.Name = "mappingTabPage";
+            mappingTabPage.Padding = new Padding(8);
+            mappingTabPage.Size = new Size(976, 456);
+            mappingTabPage.TabIndex = 2;
+            mappingTabPage.Text = "Mapping";
+            mappingTabPage.UseVisualStyleBackColor = true;
             // 
-            // ClientMappingGrid
+            // MappingGrid
             // 
-            ClientMappingGrid.Dock = DockStyle.Fill;
-            ClientMappingGrid.Location = new Point(8, 8);
-            ClientMappingGrid.Name = "ClientMappingGrid";
-            ClientMappingGrid.RowHeadersWidth = 51;
-            ClientMappingGrid.Size = new Size(960, 440);
-            ClientMappingGrid.TabIndex = 0;
-            // 
-            // projectMappingTabPage
-            // 
-            projectMappingTabPage.Controls.Add(ProjectMappingGrid);
-            projectMappingTabPage.Location = new Point(4, 29);
-            projectMappingTabPage.Name = "projectMappingTabPage";
-            projectMappingTabPage.Padding = new Padding(8);
-            projectMappingTabPage.Size = new Size(976, 456);
-            projectMappingTabPage.TabIndex = 3;
-            projectMappingTabPage.Text = "Project Mapping";
-            projectMappingTabPage.UseVisualStyleBackColor = true;
-            // 
-            // ProjectMappingGrid
-            // 
-            ProjectMappingGrid.Dock = DockStyle.Fill;
-            ProjectMappingGrid.Location = new Point(8, 8);
-            ProjectMappingGrid.Name = "ProjectMappingGrid";
-            ProjectMappingGrid.RowHeadersWidth = 51;
-            ProjectMappingGrid.Size = new Size(960, 440);
-            ProjectMappingGrid.TabIndex = 0;
+            MappingGrid.Dock = DockStyle.Fill;
+            MappingGrid.Location = new Point(8, 8);
+            MappingGrid.Name = "MappingGrid";
+            MappingGrid.RowHeadersWidth = 51;
+            MappingGrid.Size = new Size(960, 440);
+            MappingGrid.TabIndex = 0;
             // 
             // settingsTabPage
             // 
@@ -251,7 +226,7 @@
             settingsTabPage.Name = "settingsTabPage";
             settingsTabPage.Padding = new Padding(8);
             settingsTabPage.Size = new Size(976, 456);
-            settingsTabPage.TabIndex = 4;
+            settingsTabPage.TabIndex = 3;
             settingsTabPage.Text = "Settings";
             settingsTabPage.UseVisualStyleBackColor = true;
             // 
@@ -366,35 +341,35 @@
             TogglClientColumn.HeaderText = "Toggl Client";
             TogglClientColumn.MinimumWidth = 6;
             TogglClientColumn.Name = "TogglClientColumn";
-            TogglClientColumn.Width = 250;
-            // 
-            // SpesnetProjectColumn
-            // 
-            SpesnetProjectColumn.HeaderText = "Spesnet Project";
-            SpesnetProjectColumn.MinimumWidth = 6;
-            SpesnetProjectColumn.Name = "SpesnetProjectColumn";
-            SpesnetProjectColumn.Width = 300;
-            // 
-            // SpesnetClientColumn
-            // 
-            SpesnetClientColumn.HeaderText = "Spesnet Client";
-            SpesnetClientColumn.MinimumWidth = 6;
-            SpesnetClientColumn.Name = "SpesnetClientColumn";
-            SpesnetClientColumn.Width = 250;
+            TogglClientColumn.Width = 160;
             // 
             // TogglProjectColumn
             // 
             TogglProjectColumn.HeaderText = "Toggl Project";
             TogglProjectColumn.MinimumWidth = 6;
             TogglProjectColumn.Name = "TogglProjectColumn";
-            TogglProjectColumn.Width = 350;
+            TogglProjectColumn.Width = 180;
+            // 
+            // SpesnetProjectColumn
+            // 
+            SpesnetProjectColumn.HeaderText = "Spesnet Project";
+            SpesnetProjectColumn.MinimumWidth = 6;
+            SpesnetProjectColumn.Name = "SpesnetProjectColumn";
+            SpesnetProjectColumn.Width = 200;
+            // 
+            // SpesnetClientColumn
+            // 
+            SpesnetClientColumn.HeaderText = "Spesnet Client";
+            SpesnetClientColumn.MinimumWidth = 6;
+            SpesnetClientColumn.Name = "SpesnetClientColumn";
+            SpesnetClientColumn.Width = 160;
             // 
             // SpesnetWorkTaskColumn
             // 
             SpesnetWorkTaskColumn.HeaderText = "Spesnet Work Task";
             SpesnetWorkTaskColumn.MinimumWidth = 6;
             SpesnetWorkTaskColumn.Name = "SpesnetWorkTaskColumn";
-            SpesnetWorkTaskColumn.Width = 350;
+            SpesnetWorkTaskColumn.Width = 200;
             // 
             // SyncForm
             // 
@@ -414,10 +389,8 @@
             logTabPage.ResumeLayout(false);
             logTabPage.PerformLayout();
             togglClientsTabPage.ResumeLayout(false);
-            clientMappingTabPage.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)ClientMappingGrid).EndInit();
-            projectMappingTabPage.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)ProjectMappingGrid).EndInit();
+            mappingTabPage.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)MappingGrid).EndInit();
             settingsTabPage.ResumeLayout(false);
             settingsTabPage.PerformLayout();
             ResumeLayout(false);
@@ -435,10 +408,8 @@
         private TabPage togglClientsTabPage;
         private CheckedListBox TogglClientsCheckedListBox;
         private Button RefreshTogglButton;
-        private TabPage clientMappingTabPage;
-        private DataGridView ClientMappingGrid;
-        private TabPage projectMappingTabPage;
-        private DataGridView ProjectMappingGrid;
+        private TabPage mappingTabPage;
+        private DataGridView MappingGrid;
         private TabPage settingsTabPage;
         private Label togglApiTokenLabel;
         private TextBox TogglApiTokenTextBox;
@@ -453,9 +424,9 @@
         private Button SaveSettingsButton;
         private Button RefreshSpesnetButton;
         private DataGridViewComboBoxColumn TogglClientColumn;
+        private DataGridViewComboBoxColumn TogglProjectColumn;
         private DataGridViewComboBoxColumn SpesnetProjectColumn;
         private DataGridViewComboBoxColumn SpesnetClientColumn;
-        private DataGridViewComboBoxColumn TogglProjectColumn;
         private DataGridViewComboBoxColumn SpesnetWorkTaskColumn;
     }
 }

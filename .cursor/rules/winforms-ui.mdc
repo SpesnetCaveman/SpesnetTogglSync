@@ -9,13 +9,13 @@ alwaysApply: false
 ## Layout
 
 - Top bar: watermark DateTimePicker, Start Sync, mock checkbox, status.
-- Tabs: Sync Log, Toggl Clients (CheckedListBox), Client Mapping, Project Mapping, Settings.
+- Tabs: Sync Log, Toggl Clients (CheckedListBox), Mapping, Settings.
 - Prefer editing `SyncForm.Designer.cs` for control layout; keep async/event wiring in `SyncForm.cs`.
 
-## Mapping grids
+## Mapping grid
 
-- Client mapping: Toggl client → Spesnet project combo → Spesnet client combo (reload clients when project changes).
-- Project mapping: Toggl project → Spesnet work task.
+- One grid: Toggl client + Toggl project → Spesnet project → Spesnet client → Spesnet work task.
+- Reload Spesnet clients when the Spesnet project combo changes (`GetClientsByProject` / reference cache).
 - Persist selections/mappings on close and before sync via `SaveMappingsFromUi`.
 
 ## Behaviour

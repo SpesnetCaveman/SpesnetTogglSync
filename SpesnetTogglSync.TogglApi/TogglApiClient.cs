@@ -42,11 +42,11 @@ public class TogglApiClient : ITogglClient
 
     public async Task<IReadOnlyList<TogglProject>> GetProjectsAsync(long workspaceId, CancellationToken cancellationToken = default)
     {
-        _logger.Info($"Toggl: fetching projects for workspace {workspaceId}");
+        _logger.Info($"Toggl: fetching active projects for workspace {workspaceId}");
         var response = await _http.SendAsync(
             "fetch projects",
             HttpMethod.Get,
-            $"workspaces/{workspaceId}/projects",
+            $"workspaces/{workspaceId}/projects?active=true",
             cancellationToken: cancellationToken);
         return await ReadItemsAsync<TogglProject>(response, cancellationToken);
     }
