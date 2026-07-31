@@ -104,6 +104,10 @@ public class SpesnetTimekeepingClient : ISpesnetTimekeepingClient
 
     public async Task SaveWorkEntriesAsync(SpesnetSaveWorkRequest request, CancellationToken cancellationToken = default)
     {
+        request.WorkDoneList.ForEach(entry =>
+        {
+            entry.NormalHours = Math.Round(entry.NormalHours, 2);
+        });
         _logger.Info($"Spesnet: saving {request.WorkDoneList.Count} work entries");
         await _http.SendAsync(
             "save work entries",
