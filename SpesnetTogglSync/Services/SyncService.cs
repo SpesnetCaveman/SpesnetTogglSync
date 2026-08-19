@@ -70,6 +70,7 @@ public class SyncService
         var candidateEntries = new List<TogglTimeEntry>();
         var skippedCount = 0;
         var ignoredByMappingCount = 0;
+        var skippedDetails = new List<string>();
         var deferredForRunningTimer = false;
 
         foreach (var entry in entries)
@@ -78,10 +79,12 @@ public class SyncService
             // cannot advance past a still-running timer and orphan it.
             if (IsRunning(entry))
             {
+                var skippedEntry = FormatEntryLabel(entry);
                 _logger.Warn(
-                    $"Skipped (still running): {FormatEntryLabel(entry)}. " +
+                    $"Skipped (still running): {skippedEntry}. " +
                     "Later entries will sync after this timer is stopped.");
                 skippedCount++;
+                skippedDetails.Add($"still running: {skippedEntry}");
                 deferredForRunningTimer = true;
                 break;
             }
@@ -106,11 +109,13 @@ public class SyncService
 
             if (HasClientLevelIgnore(mappings, entry))
             {
+                var skippedEntry = FormatEntryLabel(entry);
                 _logger.Info(
-                    $"Ignored (mapping status=Ignore, client-level): {FormatEntryLabel(entry)} — " +
+                    $"Ignored (mapping status=Ignore, client-level): {skippedEntry} — " +
                     $"client '{entry.ClientName}'");
                 skippedCount++;
                 ignoredByMappingCount++;
+                skippedDetails.Add($"ignored by mapping (client-level): {skippedEntry}");
                 continue;
             }
 
@@ -127,11 +132,13 @@ public class SyncService
 
             if (mapping.Status == EntryMappingStatus.Ignore)
             {
+                var skippedEntry = FormatEntryLabel(entry);
                 _logger.Info(
-                    $"Ignored (mapping status=Ignore): {FormatEntryLabel(entry)} — " +
+                    $"Ignored (mapping status=Ignore): {skippedEntry} — " +
                     $"'{entry.ClientName}' / '{entry.ProjectName}'");
                 skippedCount++;
                 ignoredByMappingCount++;
+                skippedDetails.Add($"ignored by mapping: {skippedEntry}");
                 continue;
             }
 
@@ -178,9 +185,9 @@ public class SyncService
 
         if (candidateEntries.Count == 0)
         {
+            var emptySkippedSummary = BuildSkippedSummary(skippedCount, ignoredByMappingCount, skippedDetails);
             var emptyMessage =
-                $"Sync complete. Synced 0, skipped {skippedCount} " +
-                $"({ignoredByMappingCount} ignored by mapping status).";
+                $"Sync complete. Synced 0, skipped {skippedCount}{emptySkippedSummary}.";
             _logger.Info(emptyMessage);
             return new SyncResult
             {
@@ -221,9 +228,9 @@ public class SyncService
             Report($"Synced entry {entry.Id}", currentWatermark);
         }
 
+        var skippedSummary = BuildSkippedSummary(skippedCount, ignoredByMappingCount, skippedDetails);
         var summary =
-            $"Sync complete. Synced {syncedCount}, skipped {skippedCount} " +
-            $"({ignoredByMappingCount} ignored by mapping status).";
+            $"Sync complete. Synced {syncedCount}, skipped {skippedCount}{skippedSummary}.";
         _logger.Info(summary);
         return new SyncResult
         {
@@ -309,6 +316,28 @@ public class SyncService
             ? "(no description)"
             : entry.Description!;
         return $"entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST '{description}'";
+    }
+
+    private static string BuildSkippedSummary(
+        int skippedCount,
+        int ignoredByMappingCount,
+        IReadOnlyList<string> skippedDetails)
+    {
+        if (skippedCount == 0)
+        {
+            return $" ({ignoredByMappingCount} ignored by mapping status)";
+        }
+
+        var shownDetails = skippedDetails.Take(5).ToList();
+        var detailText = shownDetails.Count > 0
+            ? string.Join("; ", shownDetails)
+            : "reason unavailable";
+        var more = skippedDetails.Count > shownDetails.Count
+            ? $" (+{skippedDetails.Count - shownDetails.Count} more)"
+            : string.Empty;
+
+        return
+            $" ({ignoredByMappingCount} ignored by mapping status; skipped entries: {detailText}{more})";
     }
 
     /// <summary>
