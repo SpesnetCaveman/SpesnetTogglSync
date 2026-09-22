@@ -12,7 +12,8 @@ public class ConfigService
     [
         "appsettings.json",
         "mappings.json",
-        "syncstate.json"
+        "syncstate.json",
+        "autosync.json"
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -41,6 +42,7 @@ public class ConfigService
     private string AppSettingsPath => Path.Combine(_baseDirectory, "appsettings.json");
     private string SyncStatePath => Path.Combine(_baseDirectory, "syncstate.json");
     private string MappingsPath => Path.Combine(_baseDirectory, "mappings.json");
+    private string AutoSyncStatePath => Path.Combine(_baseDirectory, "autosync.json");
     private string ConfigLocationPath => Path.Combine(_installDirectory, ConfigLocationFileName);
 
     /// <summary>
@@ -132,6 +134,11 @@ public class ConfigService
     }
 
     public void SaveSyncState(SyncState state) => WriteJson(SyncStatePath, state);
+
+    public AutoSyncState LoadAutoSyncState() =>
+        ReadJson<AutoSyncState>(AutoSyncStatePath) ?? new AutoSyncState();
+
+    public void SaveAutoSyncState(AutoSyncState state) => WriteJson(AutoSyncStatePath, state);
 
     public MappingsFile LoadMappings()
     {

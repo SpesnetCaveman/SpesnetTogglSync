@@ -32,6 +32,7 @@
             RefreshTogglButton = new Button();
             settingsTabPage = new TabPage();
             SaveSettingsButton = new Button();
+            RunAtStartupCheckBox = new CheckBox();
             DataDirectoryTextBox = new TextBox();
             dataDirectoryLabel = new Label();
             SpesnetDomainTextBox = new TextBox();
@@ -227,6 +228,7 @@
             // settingsTabPage
             // 
             settingsTabPage.Controls.Add(SaveSettingsButton);
+            settingsTabPage.Controls.Add(RunAtStartupCheckBox);
             settingsTabPage.Controls.Add(DataDirectoryTextBox);
             settingsTabPage.Controls.Add(dataDirectoryLabel);
             settingsTabPage.Controls.Add(SpesnetDomainTextBox);
@@ -247,13 +249,23 @@
             // 
             // SaveSettingsButton
             // 
-            SaveSettingsButton.Location = new Point(12, 286);
+            SaveSettingsButton.Location = new Point(12, 324);
             SaveSettingsButton.Name = "SaveSettingsButton";
             SaveSettingsButton.Size = new Size(130, 29);
-            SaveSettingsButton.TabIndex = 13;
+            SaveSettingsButton.TabIndex = 14;
             SaveSettingsButton.Text = "Save Settings";
             SaveSettingsButton.UseVisualStyleBackColor = true;
             SaveSettingsButton.Click += SaveSettingsButton_Click;
+            // 
+            // RunAtStartupCheckBox
+            // 
+            RunAtStartupCheckBox.AutoSize = true;
+            RunAtStartupCheckBox.Location = new Point(12, 286);
+            RunAtStartupCheckBox.Name = "RunAtStartupCheckBox";
+            RunAtStartupCheckBox.Size = new Size(530, 24);
+            RunAtStartupCheckBox.TabIndex = 13;
+            RunAtStartupCheckBox.Text = "Start with Windows (notification area, daily sync prompt at 12:00)";
+            RunAtStartupCheckBox.UseVisualStyleBackColor = true;
             // 
             // DataDirectoryTextBox
             // 
@@ -442,6 +454,7 @@
         private Label dataDirectoryLabel;
         private TextBox DataDirectoryTextBox;
         private Button SaveSettingsButton;
+        private CheckBox RunAtStartupCheckBox;
         private DataGridViewComboBoxColumn StatusColumn;
         private DataGridViewComboBoxColumn TogglClientColumn;
         private DataGridViewComboBoxColumn TogglProjectColumn;

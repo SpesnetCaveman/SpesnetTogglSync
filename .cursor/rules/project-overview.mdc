@@ -14,7 +14,7 @@ WinForms (.NET 10) app that syncs **Toggl Track** → **Spesnet/EvolveMed Timeke
 ## Mapping (required)
 
 - One entry mapping: status (`Active` / `Ignore` / `New`) + Toggl **client + project** → Spesnet **project + client + work task**
-- Auto-populate all live Toggl client+project pairs; new pairs start as `New` and block sync until Active or Ignore.
+- Auto-populate all live Toggl client+project pairs; new pairs start as `New`. An entry that hits `New` (or any other reason it cannot sync yet) stops the run; entries before it still sync.
 - Client-only Ignore covers every project for that client.
 - Spesnet **comment** = mapping `CommentPrefix` + Toggl description (prefix defaults empty; concatenated as-is)
 
@@ -22,10 +22,10 @@ Spesnet clients: `GET api/Client/GetClientsByProject?projectId=` (project first)
 
 ## Non-negotiable sync rules
 
-- Watermark advances only after a successful save; persist immediately.
-- Validate all candidates before any write; abort with clear missing-map / missing client-project / missing-description / unresolved-New messages (entry times in SAST).
-- Skip Ignore mappings (and client-level Ignore); one Toggl time-entry API call per sync when possible (`start_date` + `end_date` + `meta=true`).
-- Sync only completed Toggl entries; a running timer defers later entries so the start-based watermark cannot skip it. Overlaps still sync; log a warning.
+- Watermark advances only after a successful save; persist immediately. It must not move past an entry that still needs to sync.
+- Walk entries in start order. Sync the prefix. Stop at the first entry that needs to sync but cannot (running timer, missing client/project/description, missing or `New` mapping, invalid Spesnet destination). Do not sync anything at or after that start time. Report the stop (SAST) so the user can fix it and retry.
+- Skip only permanent Ignore (entry Ignore or client-level Ignore) and continue; those entries should never sync, so the watermark may move past them.
+- One Toggl time-entry API call per sync when possible (`start_date` + `end_date` + `meta=true`). Overlaps still sync; log a warning.
 - Description required on Active sync candidates (whitespace-only counts as missing).
 - Split entries > 8h into ≤8h `normalHours` chunks.
 - Keep mock Spesnet path (`UseMockSpesnet`) working alongside the real client.

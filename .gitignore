@@ -62,3 +62,4 @@ SpesnetTogglSync/appsettings.json
 SpesnetTogglSync/config-location.json
 SpesnetTogglSync/mappings.json
 SpesnetTogglSync/syncstate.json
+SpesnetTogglSync/autosync.json

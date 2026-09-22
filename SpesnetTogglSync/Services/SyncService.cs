@@ -40,18 +40,6 @@ public class SyncService
         _logger.Info($"Sync started from watermark {watermarkUtc:o} (exclusive; only starts after this)");
         Report("Fetching Toggl time entries...");
 
-        var unresolved = FindUnresolvedMappings(mappings);
-        if (unresolved.Count > 0)
-        {
-            var sample = string.Join("; ", unresolved.Take(5).Select(FormatMappingLabel));
-            var more = unresolved.Count > 5 ? $" (+{unresolved.Count - 5} more)" : string.Empty;
-            var message =
-                $"Resolve mapping status for {unresolved.Count} row(s) still set to New before syncing: {sample}{more}. " +
-                "Set each to Active (with Spesnet mappings) or Ignore.";
-            _logger.Error(message);
-            return Fail(message);
-        }
-
         var entries = await _togglClient.GetTimeEntriesSinceAsync(watermarkUtc, cancellationToken);
         _logger.Info($"Fetched {entries.Count} Toggl entries after watermark");
 
@@ -71,119 +59,67 @@ public class SyncService
         var skippedCount = 0;
         var ignoredByMappingCount = 0;
         var skippedDetails = new List<string>();
-        var deferredForRunningTimer = false;
+        string? blockReason = null;
+        var blockIsRunning = false;
+        DateTime? blockStartUtc = null;
+        var deferredCount = 0;
 
-        foreach (var entry in entries)
+        for (var i = 0; i < entries.Count; i++)
         {
-            // Only completed entries can sync. Stop here so the watermark (entry start)
-            // cannot advance past a still-running timer and orphan it.
-            if (IsRunning(entry))
+            var entry = entries[i];
+
+            // Ignore is the only skip that may be passed. The watermark can move beyond
+            // those entries because they should never sync.
+            if (IsPermanentIgnore(mappings, entry))
             {
-                var skippedEntry = FormatEntryLabel(entry);
-                _logger.Warn(
-                    $"Skipped (still running): {skippedEntry}. " +
-                    "Later entries will sync after this timer is stopped.");
-                skippedCount++;
-                skippedDetails.Add($"still running: {skippedEntry}");
-                deferredForRunningTimer = true;
+                NotePermanentIgnore(mappings, entry, skippedDetails, ref skippedCount, ref ignoredByMappingCount);
+                continue;
+            }
+
+            var block = TryGetBlockReason(entry, mappings, referenceCache);
+            if (block != null)
+            {
+                // Stop here. A later entry must not sync, or the start-based watermark
+                // would move past this one and it would never be fetched again.
+                blockReason = block;
+                blockIsRunning = IsRunning(entry);
+                blockStartUtc = ToUtc(entry.StartUtc);
+                deferredCount = entries.Count - i - 1;
                 break;
-            }
-
-            if (!entry.ClientId.HasValue || string.IsNullOrWhiteSpace(entry.ClientName))
-            {
-                var message =
-                    $"Toggl entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST is missing a client. " +
-                    "Assign a client in Toggl, then sync again.";
-                _logger.Error(message);
-                return Fail(message);
-            }
-
-            if (!entry.ProjectId.HasValue || string.IsNullOrWhiteSpace(entry.ProjectName))
-            {
-                var message =
-                    $"Toggl entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST is missing a project. " +
-                    "Assign a project in Toggl, then sync again.";
-                _logger.Error(message);
-                return Fail(message);
-            }
-
-            if (HasClientLevelIgnore(mappings, entry))
-            {
-                var skippedEntry = FormatEntryLabel(entry);
-                _logger.Info(
-                    $"Ignored (mapping status=Ignore, client-level): {skippedEntry} — " +
-                    $"client '{entry.ClientName}'");
-                skippedCount++;
-                ignoredByMappingCount++;
-                skippedDetails.Add($"ignored by mapping (client-level): {skippedEntry}");
-                continue;
-            }
-
-            var mapping = FindEntryMapping(mappings, entry);
-            if (mapping == null)
-            {
-                var message =
-                    $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' " +
-                    $"(entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST). " +
-                    "Refresh from Toggl on the Mapping tab so the row appears, then set Active or Ignore.";
-                _logger.Error(message);
-                return Fail(message);
-            }
-
-            if (mapping.Status == EntryMappingStatus.Ignore)
-            {
-                var skippedEntry = FormatEntryLabel(entry);
-                _logger.Info(
-                    $"Ignored (mapping status=Ignore): {skippedEntry} — " +
-                    $"'{entry.ClientName}' / '{entry.ProjectName}'");
-                skippedCount++;
-                ignoredByMappingCount++;
-                skippedDetails.Add($"ignored by mapping: {skippedEntry}");
-                continue;
-            }
-
-            if (mapping.Status == EntryMappingStatus.New)
-            {
-                var message =
-                    $"Mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' is still New " +
-                    $"(entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST). " +
-                    "Set it to Active or Ignore before syncing.";
-                _logger.Error(message);
-                return Fail(message);
-            }
-
-            if (string.IsNullOrWhiteSpace(entry.Description))
-            {
-                var message =
-                    $"Toggl entry {entry.Id} at {FormatSouthAfricaDateTime(entry.StartUtc)} SAST " +
-                    $"('{entry.ClientName}' / '{entry.ProjectName}') has no description. " +
-                    "Add a description in Toggl, then sync again.";
-                _logger.Error(message);
-                return Fail(message);
             }
 
             candidateEntries.Add(entry);
         }
 
-        if (deferredForRunningTimer)
+        if (blockStartUtc is DateTime blockedAt)
         {
-            var remaining = entries.Count - skippedCount - candidateEntries.Count;
-            if (remaining > 0)
+            var held = candidateEntries.Where(entry => ToUtc(entry.StartUtc) >= blockedAt).ToList();
+            if (held.Count > 0)
             {
-                _logger.Info($"Deferred {remaining} later Toggl entr{(remaining == 1 ? "y" : "ies")} until the running timer stops.");
+                foreach (var entry in held)
+                {
+                    _logger.Info(
+                        $"Held {FormatEntryLabel(entry)} because it starts at the same time as an entry that cannot sync yet.");
+                }
+
+                candidateEntries.RemoveAll(entry => ToUtc(entry.StartUtc) >= blockedAt);
+                deferredCount += held.Count;
             }
+        }
+
+        if (blockReason != null && deferredCount > 0)
+        {
+            _logger.Info(
+                $"Deferred {deferredCount} later Toggl entr{(deferredCount == 1 ? "y" : "ies")} " +
+                "so the watermark cannot move past the entry that cannot sync yet.");
         }
 
         LogOverlappingEntries(candidateEntries);
 
-        var validationError = ValidateMappings(candidateEntries, mappings, referenceCache);
-        if (validationError != null)
-        {
-            _logger.Error(validationError);
-            return Fail(validationError);
-        }
+        var syncedCount = 0;
+        var currentWatermark = watermarkUtc;
 
-        if (candidateEntries.Count == 0)
+        if (candidateEntries.Count == 0 && blockReason == null)
         {
             var emptySkippedSummary = BuildSkippedSummary(skippedCount, ignoredByMappingCount, skippedDetails);
             var emptyMessage =
@@ -198,37 +134,65 @@ public class SyncService
             };
         }
 
-        Report("Logging in to Spesnet...");
-        await _spesnetClient.LoginAsync(cancellationToken);
-        var employeeId = referenceCache.EmployeeId > 0
-            ? referenceCache.EmployeeId
-            : await _spesnetClient.GetEmployeeIdAsync(cancellationToken);
-
-        var syncedCount = 0;
-        var currentWatermark = watermarkUtc;
-
-        foreach (var entry in candidateEntries)
+        if (candidateEntries.Count > 0)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            Report("Logging in to Spesnet...");
+            await _spesnetClient.LoginAsync(cancellationToken);
+            var employeeId = referenceCache.EmployeeId > 0
+                ? referenceCache.EmployeeId
+                : await _spesnetClient.GetEmployeeIdAsync(cancellationToken);
 
-            var mapping = FindEntryMapping(mappings, entry)!;
-            var workDoneEntries = TransformEntry(entry, employeeId, mapping);
-            var request = new SpesnetSaveWorkRequest { WorkDoneList = workDoneEntries };
+            foreach (var entry in candidateEntries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-            Report($"Syncing Toggl entry {entry.Id} ({FormatSouthAfricaDateTime(entry.StartUtc)} SAST)...");
-            await _spesnetClient.SaveWorkEntriesAsync(request, cancellationToken);
+                var mapping = FindEntryMapping(mappings, entry)!;
+                var workDoneEntries = TransformEntry(entry, employeeId, mapping);
+                var request = new SpesnetSaveWorkRequest { WorkDoneList = workDoneEntries };
 
-            // Exclusive watermark: next sync only takes entries with start > this value.
-            currentWatermark = ToUtc(entry.StartUtc);
-            syncedCount++;
+                Report($"Syncing Toggl entry {entry.Id} ({FormatSouthAfricaDateTime(entry.StartUtc)} SAST)...");
+                await _spesnetClient.SaveWorkEntriesAsync(request, cancellationToken);
 
-            var syncState = new SyncState { LastSyncedStartTime = currentWatermark };
-            _configService.SaveSyncState(syncState);
-            _logger.Info($"Synced {FormatEntryLabel(entry)}; watermark updated to {currentWatermark:o} (next sync requires start > watermark)");
-            Report($"Synced entry {entry.Id}", currentWatermark);
+                // Exclusive watermark: next sync only takes entries with start > this value.
+                // Never set this to the blocked entry's start (or an equal start), or that entry is skipped forever.
+                currentWatermark = ToUtc(entry.StartUtc);
+                syncedCount++;
+
+                var syncState = new SyncState { LastSyncedStartTime = currentWatermark };
+                _configService.SaveSyncState(syncState);
+                _logger.Info($"Synced {FormatEntryLabel(entry)}; watermark updated to {currentWatermark:o} (next sync requires start > watermark)");
+                Report($"Synced entry {entry.Id}", currentWatermark);
+            }
         }
 
         var skippedSummary = BuildSkippedSummary(skippedCount, ignoredByMappingCount, skippedDetails);
+        if (blockReason != null)
+        {
+            var deferredText = deferredCount > 0
+                ? $" {deferredCount} later entr{(deferredCount == 1 ? "y" : "ies")} were not synced."
+                : string.Empty;
+            var stoppedMessage =
+                $"{blockReason} Sync stopped here so this entry is included next time.{deferredText} " +
+                $"Synced {syncedCount}, skipped {skippedCount}{skippedSummary}.";
+            if (blockIsRunning)
+            {
+                _logger.Warn(stoppedMessage);
+            }
+            else
+            {
+                _logger.Error(stoppedMessage);
+            }
+
+            return new SyncResult
+            {
+                Success = false,
+                Message = stoppedMessage,
+                SyncedCount = syncedCount,
+                SkippedCount = skippedCount,
+                LastSyncedStartTime = currentWatermark
+            };
+        }
+
         var summary =
             $"Sync complete. Synced {syncedCount}, skipped {skippedCount}{skippedSummary}.";
         _logger.Info(summary);
@@ -240,6 +204,115 @@ public class SyncService
             SkippedCount = skippedCount,
             LastSyncedStartTime = currentWatermark
         };
+    }
+
+    /// <summary>
+    /// Client-level or entry Ignore. These entries are never synced, so the watermark may move past them.
+    /// </summary>
+    private bool IsPermanentIgnore(UserMappings mappings, TogglTimeEntry entry)
+    {
+        if (!entry.ClientId.HasValue || string.IsNullOrWhiteSpace(entry.ClientName))
+        {
+            return false;
+        }
+
+        if (HasClientLevelIgnore(mappings, entry))
+        {
+            return true;
+        }
+
+        if (!entry.ProjectId.HasValue || string.IsNullOrWhiteSpace(entry.ProjectName))
+        {
+            return false;
+        }
+
+        var mapping = FindEntryMapping(mappings, entry);
+        return mapping?.Status == EntryMappingStatus.Ignore;
+    }
+
+    private void NotePermanentIgnore(
+        UserMappings mappings,
+        TogglTimeEntry entry,
+        List<string> skippedDetails,
+        ref int skippedCount,
+        ref int ignoredByMappingCount)
+    {
+        var skippedEntry = FormatEntryLabel(entry);
+        var clientLevel = HasClientLevelIgnore(mappings, entry);
+        if (clientLevel)
+        {
+            _logger.Info(
+                $"Ignored (mapping status=Ignore, client-level): {skippedEntry} — " +
+                $"client '{entry.ClientName}'");
+            skippedDetails.Add($"ignored by mapping (client-level): {skippedEntry}");
+        }
+        else
+        {
+            _logger.Info(
+                $"Ignored (mapping status=Ignore): {skippedEntry} — " +
+                $"'{entry.ClientName}' / '{entry.ProjectName}'");
+            skippedDetails.Add($"ignored by mapping: {skippedEntry}");
+        }
+
+        skippedCount++;
+        ignoredByMappingCount++;
+    }
+
+    /// <summary>
+    /// Why this entry needs to sync but cannot yet. Null means it can sync now.
+    /// </summary>
+    private static string? TryGetBlockReason(
+        TogglTimeEntry entry,
+        UserMappings mappings,
+        SpesnetReferenceCache referenceCache)
+    {
+        var when = FormatSouthAfricaDateTime(entry.StartUtc);
+        if (IsRunning(entry))
+        {
+            return
+                $"Toggl entry {entry.Id} at {when} SAST is still running. " +
+                "Stop the timer, then sync again.";
+        }
+
+        if (!entry.ClientId.HasValue || string.IsNullOrWhiteSpace(entry.ClientName))
+        {
+            return
+                $"Toggl entry {entry.Id} at {when} SAST is missing a client. " +
+                "Assign a client in Toggl, then sync again.";
+        }
+
+        if (!entry.ProjectId.HasValue || string.IsNullOrWhiteSpace(entry.ProjectName))
+        {
+            return
+                $"Toggl entry {entry.Id} at {when} SAST is missing a project. " +
+                "Assign a project in Toggl, then sync again.";
+        }
+
+        var mapping = FindEntryMapping(mappings, entry);
+        if (mapping == null)
+        {
+            return
+                $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' " +
+                $"(entry {entry.Id} at {when} SAST). " +
+                "Refresh from Toggl on the Mapping tab so the row appears, then set Active or Ignore.";
+        }
+
+        if (mapping.Status == EntryMappingStatus.New)
+        {
+            return
+                $"Mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' is still New " +
+                $"(entry {entry.Id} at {when} SAST). Set it to Active or Ignore before syncing.";
+        }
+
+        if (string.IsNullOrWhiteSpace(entry.Description))
+        {
+            return
+                $"Toggl entry {entry.Id} at {when} SAST " +
+                $"('{entry.ClientName}' / '{entry.ProjectName}') has no description. " +
+                "Add a description in Toggl, then sync again.";
+        }
+
+        return ValidateEntryDestination(entry, mapping, referenceCache);
     }
 
     private static bool IsRunning(TogglTimeEntry entry) =>
@@ -367,50 +440,39 @@ public class SyncService
             .ToList();
     }
 
-    private static string? ValidateMappings(
-        IReadOnlyList<TogglTimeEntry> entries,
-        UserMappings mappings,
+    private static string? ValidateEntryDestination(
+        TogglTimeEntry entry,
+        EntryMapping mapping,
         SpesnetReferenceCache referenceCache)
     {
-        foreach (var entry in entries)
+        var when = FormatSouthAfricaDateTime(entry.StartUtc);
+        if (!mapping.HasSpesnetDestination)
         {
-            var when = FormatSouthAfricaDateTime(entry.StartUtc);
-            var mapping = FindEntryMapping(mappings, entry);
-            if (mapping == null)
-            {
-                return
-                    $"Missing mapping for Toggl client '{entry.ClientName}' and project '{entry.ProjectName}' " +
-                    $"(entry {entry.Id} at {when} SAST). Configure it on the Mapping tab.";
-            }
+            return
+                $"Active mapping for '{entry.ClientName}' / '{entry.ProjectName}' is missing Spesnet project, client, or work task " +
+                $"(entry {entry.Id} at {when} SAST).";
+        }
 
-            if (!mapping.HasSpesnetDestination)
-            {
-                return
-                    $"Active mapping for '{entry.ClientName}' / '{entry.ProjectName}' is missing Spesnet project, client, or work task " +
-                    $"(entry {entry.Id} at {when} SAST).";
-            }
+        if (!referenceCache.Projects.Any(p => p.Id == mapping.SpesnetProjectId))
+        {
+            return
+                $"Mapped Spesnet project id {mapping.SpesnetProjectId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found " +
+                $"(entry {entry.Id} at {when} SAST).";
+        }
 
-            if (!referenceCache.Projects.Any(p => p.Id == mapping.SpesnetProjectId))
-            {
-                return
-                    $"Mapped Spesnet project id {mapping.SpesnetProjectId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found " +
-                    $"(entry {entry.Id} at {when} SAST).";
-            }
+        if (!referenceCache.ClientsByProject.TryGetValue(mapping.SpesnetProjectId, out var clients) ||
+            clients.All(c => c.Id != mapping.SpesnetClientId))
+        {
+            return
+                $"Mapped Spesnet client id {mapping.SpesnetClientId} for '{entry.ClientName}' / '{entry.ProjectName}' " +
+                $"was not found for project {mapping.SpesnetProjectId} (entry {entry.Id} at {when} SAST).";
+        }
 
-            if (!referenceCache.ClientsByProject.TryGetValue(mapping.SpesnetProjectId, out var clients) ||
-                clients.All(c => c.Id != mapping.SpesnetClientId))
-            {
-                return
-                    $"Mapped Spesnet client id {mapping.SpesnetClientId} for '{entry.ClientName}' / '{entry.ProjectName}' " +
-                    $"was not found for project {mapping.SpesnetProjectId} (entry {entry.Id} at {when} SAST).";
-            }
-
-            if (!referenceCache.WorkTasks.Any(w => w.Id == mapping.SpesnetWorkTaskId))
-            {
-                return
-                    $"Mapped Spesnet work task id {mapping.SpesnetWorkTaskId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found " +
-                    $"(entry {entry.Id} at {when} SAST).";
-            }
+        if (!referenceCache.WorkTasks.Any(w => w.Id == mapping.SpesnetWorkTaskId))
+        {
+            return
+                $"Mapped Spesnet work task id {mapping.SpesnetWorkTaskId} for '{entry.ClientName}' / '{entry.ProjectName}' was not found " +
+                $"(entry {entry.Id} at {when} SAST).";
         }
 
         return null;
@@ -434,16 +496,6 @@ public class SyncService
     private static bool MatchesTogglProject(EntryMapping mapping, TogglTimeEntry entry) =>
         mapping.TogglProjectId == entry.ProjectId!.Value ||
         string.Equals(mapping.TogglProjectName, entry.ProjectName, StringComparison.OrdinalIgnoreCase);
-
-    private static string FormatMappingLabel(EntryMapping mapping)
-    {
-        if (string.IsNullOrWhiteSpace(mapping.TogglProjectName))
-        {
-            return $"'{mapping.TogglClientName}' (client-level)";
-        }
-
-        return $"'{mapping.TogglClientName}' / '{mapping.TogglProjectName}'";
-    }
 
     private static List<SpesnetWorkDoneEntry> TransformEntry(
         TogglTimeEntry entry,

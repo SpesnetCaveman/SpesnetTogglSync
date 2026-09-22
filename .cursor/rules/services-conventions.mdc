@@ -8,10 +8,10 @@ alwaysApply: false
 
 ## SyncService
 
-- Fail-fast validation before Spesnet writes (including required Toggl description; whitespace-only is missing).
-- User-facing validation / abort messages show entry times in South African (GMT+2 / SAST), not UTC.
-- Only completed Toggl entries sync (`duration < 0` or null `stop` → warn and stop; defer later entries so start-based watermark cannot orphan the runner).
-- Watermark is entry `StartUtc` only (exclusive `>`; overlaps still sync); log a warning when ranges overlap.
+- Walk entries in start order. Sync entries before the first one that needs to sync but cannot. Stop there (do not write it or anything later). User-facing stop messages show entry times in South African (GMT+2 / SAST).
+- Permanent Ignore (entry or client-level) is the only skip that continues. Every other skip (running timer, missing client/project/description, missing or `New` mapping, invalid destination) stops the run so the start-based watermark cannot pass that entry.
+- Do not sync another entry with a start greater than or equal to the stopped entry's start.
+- Watermark is entry `StartUtc` only (exclusive `>`; overlaps still sync); log a warning when ranges overlap. Whitespace-only description counts as missing.
 - Spesnet `txdatetime` is the entry start in South African (GMT+2) local time, not UTC.
 - Update watermark via `ConfigService.SaveSyncState` after each successful entry.
 - Raise `Progress` for UI status / DateTimePicker updates.
@@ -29,6 +29,7 @@ alwaysApply: false
 ## Config / logging
 
 - Persist via `ConfigService` JSON (camelCase, indented) under the resolved data directory.
+- Daily tray schedule is `autosync.json` (`AutoSyncState`). Do not store it on `SyncState`; entry saves rewrite that file with only the watermark.
 - Bootstrap: optional `config-location.json` next to the exe (`dataDirectory`); never put that path only inside appsettings.
 - Do not commit secrets; extend `appsettings.example.json` / `config-location.example.json` for new keys.
 - Use `FileLogger` (`IApiLogger`) for auditable trail (logs under data directory).

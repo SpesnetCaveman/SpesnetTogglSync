@@ -28,4 +28,7 @@ alwaysApply: false
 - Disable sync/refresh buttons while async work runs.
 - Marshal logger UI updates with `Invoke`/`BeginInvoke` when needed.
 - On load: restore watermark, settings, mappings; optionally auto-load Spesnet reference (especially mock).
-- Require Spesnet reference cache; block sync while any relevant mapping remains `New`.
+- Require Spesnet reference cache. A `New` mapping stops sync at the first matching entry; earlier entries still sync.
+- The process lives in the notification area (`TrayApplicationContext`). Closing the form hides it; Exit is on the tray menu. `--tray` starts hidden (Windows startup).
+- Daily prompt at 12:00 SAST; cancel within 1 hour or sync runs without showing the form. Sync failures (including a missing description) use a tray balloon. Schedule state is `autosync.json`, not `syncstate.json`.
+- One sync at a time via `SyncActivity`. Background watermark updates must go through `ApplySyncProgress` so closing the form cannot roll the watermark back.

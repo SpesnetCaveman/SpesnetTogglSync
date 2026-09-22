@@ -29,8 +29,7 @@ One **entry mapping** row defines status plus the destination for a Toggl client
 | Spesnet Project + Client + Work task | Destination when Active |
 | Description → Comment | Copied onto Spesnet work done |
 
-- Rows left on **New** block sync until changed to Active or Ignore.
-- Entries missing client/project, or with no matching Active mapping (and no client-level Ignore), **abort the sync** with a clear message (no partial writes after validation fails).
+- **Ignore** is the only skip that sync continues past. Any other entry that should sync but cannot (still running, missing client/project/description, `New` or missing mapping, invalid Spesnet destination) stops the run. Entries before it are saved; later ones wait so the watermark cannot skip the blocked entry.
 - Entries longer than 8 hours are split into ≤8h chunks (all `normalHours`).
 
 ## Runtime files (gitignored)

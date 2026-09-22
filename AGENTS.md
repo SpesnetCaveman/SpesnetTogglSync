@@ -6,7 +6,9 @@ Guidance for AI agents working in this repository.
 
 A **.NET 10 WinForms** personal tool that syncs **Toggl Track** time entries into **Spesnet / EvolveMed Timekeeping** (`gateway_internal.evolvemed.co.za/api-evolveTimekeepingAPI`).
 
-Primary entry: `SpesnetTogglSync/SyncForm.cs` → `Services/SyncService.cs`.
+Primary entry: `SpesnetTogglSync/Program.cs` → `TrayApplicationContext` (notification area) → `SyncForm.cs` → `Services/SyncService.cs`.
+
+The tray icon prompts at 12:00 SAST and, unless cancelled within one hour, syncs without opening the form. Sync problems (cannot sync, missing description, unresolved mappings, and similar) raise a Windows balloon. Closing the form hides it; Exit is on the tray menu. `autosync.json` stores the daily schedule. `--tray` starts hidden and is what Windows startup launches.
 
 Solution projects:
 
@@ -29,11 +31,11 @@ Solution projects:
 ## Sync invariants (preserve these)
 
 1. **Watermark**: `syncstate.json` / DateTimePicker — only entries with `start > watermark`. After each successful Spesnet save for a Toggl entry, persist the new watermark immediately.
-2. **Validate all, then write**: mapping/client/project validation runs on the full candidate set before any Spesnet save. Fail with a user-facing message naming the missing map.
-3. **Mapping status**: each entry mapping is `Active`, `Ignore`, or `New`. Sync is blocked while any relevant row remains `New`. `Ignore` skips entries; `Active` requires full Spesnet destination. A client-only row (empty project) with `Ignore` skips every project for that client.
-4. **Missing Toggl client, project, or description** on an entry → abort; include entry id, South African (GMT+2) date/time, and client/project in the message so the user can fix it in Toggl. Whitespace-only description counts as missing.
+2. **Stop at the first entry that cannot sync yet**: entries before it are saved; that entry and anything later are not. The watermark must stay before it so the next run fetches it again. Reasons include a running timer, missing client/project/description, a missing or `New` mapping, and an invalid Spesnet destination.
+3. **Mapping status**: each entry mapping is `Active`, `Ignore`, or `New`. `Ignore` is the only skip that continues (those entries should never sync). `New` stops the run at the first matching entry. `Active` requires a full Spesnet destination. A client-only row (empty project) with `Ignore` skips every project for that client.
+4. **Missing Toggl client, project, or description** stops the run at that entry (entries before it are already saved). Include entry id, South African (GMT+2) date/time, and client/project in the message so the user can fix it in Toggl. Whitespace-only description counts as missing.
 5. **Duration > 8 hours** → split into multiple Spesnet rows ≤ 8h; always use `normalHours` (overtime = 0).
-6. **Minimize Toggl calls**: sync uses `GET /me/time_entries?start_date=&end_date=&meta=true` (end_date = now). Clients/projects fetch only for mapping UI refresh. Only completed entries sync; a running timer defers later entries so the start-based watermark cannot skip it. Overlaps still sync (watermark = start); log a warning.
+6. **Minimize Toggl calls**: sync uses `GET /me/time_entries?start_date=&end_date=&meta=true` (end_date = now). Clients/projects fetch only for mapping UI refresh. A running timer stops the run like any other entry that cannot sync yet. Overlaps still sync (watermark = start); log a warning. Do not sync entries that start at the same time as the stopped entry.
 7. **Mock by default**: `UseMockSpesnet: true` → `MockSpesnetTimekeepingClient`. Real client uses cookie login. Prefer keeping both behind `ISpesnetTimekeepingClient`.
 8. **User-facing entry times** in validation / abort messages use South African (GMT+2 / SAST), not UTC.
 
@@ -52,6 +54,7 @@ When a debugger is attached, `Debugger.Break()` runs there. Inspect locals: `aiP
 
 | Path | Role |
 |------|------|
+| `SpesnetTogglSync/TrayApplicationContext.cs` | Notification-area icon, daily 12:00 prompt, unattended sync |
 | `SpesnetTogglSync/SyncForm.cs` | UI: sync bar, tabs (log, mapping, settings) |
 | `SpesnetTogglSync/Services/SyncService.cs` | Orchestration, validation, transform, watermark |
 | `SpesnetTogglSync.TogglApi/TogglApiClient.cs` | Toggl Track API v9 (token auth) |
@@ -84,7 +87,7 @@ Model `Models.TogglClient` vs HTTP helper `TogglApi.TogglApiClient`. Do **not** 
 
 ## Secrets and git
 
-Never commit `appsettings.json`, `syncstate.json`, `mappings.json`, `config-location.json`, or `logs/`. Update `appsettings.example.json` / `config-location.example.json` when adding settings keys.
+Never commit `appsettings.json`, `syncstate.json`, `autosync.json`, `mappings.json`, `config-location.json`, or `logs/`. Update `appsettings.example.json` / `config-location.example.json` when adding settings keys.
 
 ## Data directory (bootstrap)
 

@@ -20,6 +20,7 @@ public partial class SyncForm : Form
 
     private readonly ConfigService _configService;
     private readonly FileLogger _logger;
+    private readonly SyncActivity _syncActivity;
     private AppSettings _settings = new();
     private SyncState _syncState = new();
     private MappingsFile _mappingsFile = new();
@@ -32,11 +33,22 @@ public partial class SyncForm : Form
     private bool _mappingsDirty;
     private bool _suppressMappingDirty;
 
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal Action<string>? OnSyncIssue { get; set; }
+
     public SyncForm()
+        : this(
+            new ConfigService(ConfigService.ResolveDataDirectory()),
+            new FileLogger(ConfigService.ResolveDataDirectory()),
+            new SyncActivity())
     {
-        var dataDirectory = ConfigService.ResolveDataDirectory();
-        _configService = new ConfigService(dataDirectory);
-        _logger = new FileLogger(dataDirectory);
+    }
+
+    internal SyncForm(ConfigService configService, FileLogger logger, SyncActivity syncActivity)
+    {
+        _configService = configService;
+        _logger = logger;
+        _syncActivity = syncActivity;
 
         InitializeComponent();
         InitializeMappingGrids();
@@ -131,6 +143,7 @@ public partial class SyncForm : Form
         SpesnetPasswordTextBox.Text = _settings.SpesnetPassword;
         SpesnetDomainTextBox.Text = _settings.SpesnetDomain;
         DataDirectoryTextBox.Text = _configService.DataDirectory;
+        RunAtStartupCheckBox.Checked = _settings.IsRunAtStartupEnabled();
     }
 
     private void SaveSettingsFromUi()
@@ -140,8 +153,18 @@ public partial class SyncForm : Form
         _settings.SpesnetPassword = SpesnetPasswordTextBox.Text;
         _settings.SpesnetDomain = SpesnetDomainTextBox.Text.Trim();
         _settings.UseMockSpesnet = UseMockSpesnetCheckBox.Checked;
+        _settings.RunAtStartup = RunAtStartupCheckBox.Checked;
         _settings.SpesnetReferenceCache = _referenceCache;
         _configService.SaveSettings(_settings);
+        if (!WindowsStartup.TrySetEnabled(_settings.IsRunAtStartupEnabled(), out var startupError))
+        {
+            MessageBox.Show(
+                this,
+                $"Settings were saved, but Start with Windows could not be updated: {startupError}",
+                "Start with Windows",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     private bool TryApplyDataDirectoryFromUi()
@@ -965,9 +988,11 @@ public partial class SyncForm : Form
 
         if (_mappingsDirty)
         {
+            const string message = "You have unsaved mapping changes. Click Save Mappings on the Mapping tab before syncing.";
+            OnSyncIssue?.Invoke(message);
             MessageBox.Show(
                 this,
-                "You have unsaved mapping changes. Click Save Mappings on the Mapping tab before syncing.",
+                message,
                 "Unsaved Mappings",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
@@ -978,26 +1003,28 @@ public partial class SyncForm : Form
 
         if (string.IsNullOrWhiteSpace(_settings.TogglApiToken))
         {
-            MessageBox.Show(this, "Configure your Toggl API token on the Settings tab.", "Missing Configuration", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            const string message = "Cannot sync: configure your Toggl API token on the Settings tab.";
+            OnSyncIssue?.Invoke(message);
+            MessageBox.Show(this, message, "Missing Configuration", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         if (_referenceCache.Projects.Count == 0 || _referenceCache.WorkTasks.Count == 0)
         {
-            MessageBox.Show(this, "Refresh Spesnet reference data before syncing.", "Missing Reference Data", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            const string message = "Cannot sync: refresh Spesnet reference data before syncing.";
+            OnSyncIssue?.Invoke(message);
+            MessageBox.Show(this, message, "Missing Reference Data", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        var unresolved = SyncService.FindUnresolvedMappings(GetCurrentUserMappings());
-        if (unresolved.Count > 0)
+        if (!_syncActivity.TryBegin())
         {
             MessageBox.Show(
                 this,
-                $"Resolve {unresolved.Count} mapping(s) still set to New before syncing. Set each to Active (with Spesnet fields) or Ignore. " +
-                "A client-only row with Status=Ignore covers every project for that client.",
-                "Unresolved Mappings",
+                "A sync is already in progress.",
+                "Sync",
                 MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
+                MessageBoxIcon.Information);
             return;
         }
 
@@ -1031,6 +1058,7 @@ public partial class SyncForm : Form
             StatusLabel.Text = result.Message;
             if (!result.Success)
             {
+                OnSyncIssue?.Invoke(result.Message);
                 MessageBox.Show(this, result.Message, "Sync Failed", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             else
@@ -1042,14 +1070,83 @@ public partial class SyncForm : Form
         {
             _logger.Error(ex.Message);
             StatusLabel.Text = "Sync failed.";
+            OnSyncIssue?.Invoke(ex.Message);
             MessageBox.Show(this, ex.Message, "Sync Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
             _syncCancellation?.Dispose();
             _syncCancellation = null;
+            _syncActivity.End();
             SetUiEnabled(true);
         }
+    }
+
+    public bool HasUnsavedMappingChanges => _mappingsDirty;
+
+    public void ApplySyncProgress(SyncProgressEventArgs e)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => ApplySyncProgress(e));
+            return;
+        }
+
+        StatusLabel.Text = e.Message;
+        if (e.UpdatedWatermark is not DateTime watermark)
+        {
+            return;
+        }
+
+        var watermarkUtc = ToUtc(watermark);
+        _syncState.LastSyncedStartTime = watermarkUtc;
+        StartSyncDateTimeControl.Value = watermarkUtc.ToLocalTime();
+    }
+
+    public void ApplyReferenceCache(SpesnetReferenceCache cache)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => ApplyReferenceCache(cache));
+            return;
+        }
+
+        _referenceCache = cache;
+        _settings.SpesnetReferenceCache = cache;
+        RefreshMappingGridSources();
+    }
+
+    public void SetSyncBusy(bool busy)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => SetSyncBusy(busy));
+            return;
+        }
+
+        SetUiEnabled(!busy);
+        if (!busy)
+        {
+            return;
+        }
+
+        mainTabControl.SelectedTab = logTabPage;
+        StatusLabel.Text = "Sync in progress...";
     }
 
     private void SyncService_Progress(object? sender, SyncProgressEventArgs e)
@@ -1074,7 +1171,7 @@ public partial class SyncForm : Form
     /// Prefer the full-precision value in syncstate when the picker still shows the same
     /// second (DateTimePicker can lose sub-second / Kind fidelity on round-trip).
     /// </summary>
-    private DateTime GetSyncWatermarkUtc()
+    public DateTime GetSyncWatermarkUtc()
     {
         var pickerUtc = ToUtc(StartSyncDateTimeControl.Value.ToUniversalTime());
         if (_syncState.LastSyncedStartTime is not DateTime stored)
@@ -1107,9 +1204,21 @@ public partial class SyncForm : Form
 
     private void AppendLogLine(string line)
     {
+        if (IsDisposed)
+        {
+            return;
+        }
+
         if (InvokeRequired)
         {
-            BeginInvoke(() => AppendLogLine(line));
+            try
+            {
+                BeginInvoke(() => AppendLogLine(line));
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
             return;
         }
 
