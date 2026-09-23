@@ -13,6 +13,7 @@ alwaysApply: false
 - Do not sync another entry with a start greater than or equal to the stopped entry's start.
 - Watermark is entry `StartUtc` only (exclusive `>`; overlaps still sync); log a warning when ranges overlap. Whitespace-only description counts as missing.
 - Spesnet `txdatetime` is the entry start in South African (GMT+2) local time, not UTC.
+- Round `normalHours` to the nearest 0.05 in `SyncService` (from seconds, half away from zero) before the 8h split. Leave the real client’s 2-decimal round on save. Do not apply that 0.05 grid to earnings or invoice hours.
 - Update watermark via `ConfigService.SaveSyncState` after each successful entry.
 - Raise `Progress` for UI status / DateTimePicker updates.
 
@@ -29,7 +30,8 @@ alwaysApply: false
 ## Config / logging
 
 - Persist via `ConfigService` JSON (camelCase, indented) under the resolved data directory.
-- Daily tray schedule is `autosync.json` (`AutoSyncState`). Do not store it on `SyncState`; entry saves rewrite that file with only the watermark.
+- Daily tray schedule is `autosync.json` (`AutoSyncState`), including `BillingReportCycleStart`. Do not store it on `SyncState`; entry saves rewrite that file with only the watermark.
+- Billing cycle start day, hourly rate, daily sync time (`HH:mm` SAST), billing report folder, and the one-time invoice template import path live on `AppSettings`. Invoices always use `{data directory}/invoice-template.docx` (copied once; do not commit it). Earnings use tracked Toggl seconds (stopped entries whose start falls in the cycle, SAST), not the 0.05-rounded Spesnet hours. The archived report is the Reports API summary PDF for the previous cycle plus an invoice PDF from a temporary Word copy of `invoice-template.docx` (that file stays unchanged; Word COM, no extra NuGet). It is written once per cycle start, and only after every non-Ignore entry in that cycle is at or before the watermark. It also waits while the hourly rate is 0 or the template is missing. `AppSettings.InvoiceNumber` is the latest issued number. A new period uses the next number and updates that setting. Which period used which number lives in `invoice-numbers.json` (not `syncstate.json` or `autosync.json`): period key `yyyy-MM-dd_yyyy-MM-dd`, one number per period, stored before the PDFs are written, reused when that period is regenerated. **Create report** next to Start Sync writes both files immediately and still reuses the number. Timesheet filename starts with `toggle timesheet report`.
 - Bootstrap: optional `config-location.json` next to the exe (`dataDirectory`); never put that path only inside appsettings.
 - Do not commit secrets; extend `appsettings.example.json` / `config-location.example.json` for new keys.
 - Use `FileLogger` (`IApiLogger`) for auditable trail (logs under data directory).

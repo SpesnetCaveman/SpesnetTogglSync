@@ -36,6 +36,9 @@ public partial class SyncForm : Form
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     internal Action<string>? OnSyncIssue { get; set; }
 
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal Action? OnSyncSucceeded { get; set; }
+
     public SyncForm()
         : this(
             new ConfigService(ConfigService.ResolveDataDirectory()),
@@ -143,6 +146,23 @@ public partial class SyncForm : Form
         SpesnetPasswordTextBox.Text = _settings.SpesnetPassword;
         SpesnetDomainTextBox.Text = _settings.SpesnetDomain;
         DataDirectoryTextBox.Text = _configService.DataDirectory;
+        HourlyRateNumeric.Value = ClampHourlyRate(_settings.HourlyRate);
+        BillingCycleStartDayNumeric.Value = BillingCycle.NormalizeStartDay(_settings.BillingCycleStartDay);
+        var syncAt = DailySyncTime.Parse(_settings.DailySyncTime);
+        DailySyncTimePicker.Value = DateTime.Today.Add(syncAt);
+        BillingReportDirectoryTextBox.Text = _settings.BillingReportDirectory;
+        InvoiceNumberNumeric.Value = ClampInvoiceNumber(
+            InvoiceNumbers.Current(_settings, _configService.LoadInvoiceLedger()));
+        try
+        {
+            InvoiceDocument.EnsureAppCopy(_configService.AppInvoiceTemplatePath, _settings.InvoiceTemplatePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Could not copy the invoice template into the data folder: {ex.Message}");
+        }
+
+        InvoiceTemplateTextBox.Text = _configService.AppInvoiceTemplatePath;
         RunAtStartupCheckBox.Checked = _settings.IsRunAtStartupEnabled();
     }
 
@@ -153,6 +173,15 @@ public partial class SyncForm : Form
         _settings.SpesnetPassword = SpesnetPasswordTextBox.Text;
         _settings.SpesnetDomain = SpesnetDomainTextBox.Text.Trim();
         _settings.UseMockSpesnet = UseMockSpesnetCheckBox.Checked;
+        _settings.HourlyRate = HourlyRateNumeric.Value;
+        _settings.BillingCycleStartDay = (int)BillingCycleStartDayNumeric.Value;
+        _settings.DailySyncTime = DailySyncTime.Format(DailySyncTimePicker.Value.TimeOfDay);
+        _settings.BillingReportDirectory = BillingReportDirectoryTextBox.Text.Trim();
+        _settings.InvoiceNumber = (int)InvoiceNumberNumeric.Value;
+        if (File.Exists(_configService.AppInvoiceTemplatePath))
+        {
+            _settings.InvoiceTemplatePath = _configService.AppInvoiceTemplatePath;
+        }
         _settings.RunAtStartup = RunAtStartupCheckBox.Checked;
         _settings.SpesnetReferenceCache = _referenceCache;
         _configService.SaveSettings(_settings);
@@ -961,6 +990,96 @@ public partial class SyncForm : Form
         TrySaveMappingsToDisk();
     }
 
+    private void BrowseBillingReportDirectoryButton_Click(object sender, EventArgs e)
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Folder for billing-cycle Toggl reports",
+            UseDescriptionForTitle = true,
+            SelectedPath = BillingReportDirectoryTextBox.Text
+        };
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            BillingReportDirectoryTextBox.Text = dialog.SelectedPath;
+        }
+    }
+
+    private void BrowseInvoiceTemplateButton_Click(object sender, EventArgs e)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Import invoice template",
+            Filter = "Word documents (*.docx)|*.docx"
+        };
+        var importFrom = _settings.InvoiceTemplatePath?.Trim();
+        var directory = string.IsNullOrEmpty(importFrom) ? null : Path.GetDirectoryName(importFrom);
+        if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+        {
+            dialog.InitialDirectory = directory;
+        }
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            InvoiceDocument.ReplaceAppCopy(dialog.FileName, _configService.AppInvoiceTemplatePath);
+            InvoiceTemplateTextBox.Text = _configService.AppInvoiceTemplatePath;
+            _settings.InvoiceTemplatePath = _configService.AppInvoiceTemplatePath;
+            _logger.Info($"Imported invoice template to {_configService.AppInvoiceTemplatePath}");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Invoice template", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private async void CreateTogglReportButton_Click(object sender, EventArgs e)
+    {
+        if (!_syncActivity.TryBegin())
+        {
+            MessageBox.Show(this, "A sync is already in progress.", "Toggl report", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        SaveSettingsFromUi();
+        if (string.IsNullOrWhiteSpace(_settings.TogglApiToken))
+        {
+            _syncActivity.End();
+            MessageBox.Show(
+                this,
+                "Configure the Toggl API token on the Settings tab first.",
+                "Toggl report",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            SetUiEnabled(false);
+            StatusLabel.Text = "Creating report...";
+            using var togglClient = CreateTogglClient();
+            var message = await new BillingService(_configService, _logger).CreateReportNowAsync(togglClient, CancellationToken.None);
+            StatusLabel.Text = message;
+            MessageBox.Show(this, message, "Toggl report", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex.Message);
+            StatusLabel.Text = "Toggl report was not saved.";
+            MessageBox.Show(this, ex.Message, "Toggl report", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            RefreshInvoiceNumber();
+            _syncActivity.End();
+            SetUiEnabled(true);
+        }
+    }
+
     private void SaveSettingsButton_Click(object sender, EventArgs e)
     {
         if (!TryApplyDataDirectoryFromUi())
@@ -1046,6 +1165,11 @@ public partial class SyncForm : Form
                 GetCurrentUserMappings(),
                 _referenceCache,
                 _syncCancellation.Token);
+            await new BillingService(_configService, _logger).ApplyAsync(
+                togglClient,
+                result,
+                _syncCancellation.Token);
+            RefreshInvoiceNumber();
 
             if (result.LastSyncedStartTime.HasValue)
             {
@@ -1055,7 +1179,12 @@ public partial class SyncForm : Form
                 StartSyncDateTimeControl.Value = syncedUtc.ToLocalTime();
             }
 
-            StatusLabel.Text = result.Message;
+            var details = string.IsNullOrWhiteSpace(result.BillingNotice)
+                ? result.Message
+                : result.BillingNotice + Environment.NewLine + Environment.NewLine + result.Message;
+            StatusLabel.Text = result.Success && !string.IsNullOrWhiteSpace(result.BillingNotice)
+                ? result.BillingNotice
+                : result.Message;
             if (!result.Success)
             {
                 OnSyncIssue?.Invoke(result.Message);
@@ -1063,8 +1192,17 @@ public partial class SyncForm : Form
             }
             else
             {
-                MessageBox.Show(this, result.Message, "Sync Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, details, "Sync Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+
+            _configService.MarkAutomaticSyncCompletedIfDue();
+            if (result.Success)
+            {
+                OnSyncSucceeded?.Invoke();
+            }
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception ex)
         {
@@ -1072,6 +1210,8 @@ public partial class SyncForm : Form
             StatusLabel.Text = "Sync failed.";
             OnSyncIssue?.Invoke(ex.Message);
             MessageBox.Show(this, ex.Message, "Sync Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            await TryBillingAfterSyncFailureAsync();
+            _configService.MarkAutomaticSyncCompletedIfDue();
         }
         finally
         {
@@ -1197,6 +1337,42 @@ public partial class SyncForm : Form
 
     private TogglApiClient CreateTogglClient() => new(_settings.TogglApiToken, _logger);
 
+    private async Task TryBillingAfterSyncFailureAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_settings.TogglApiToken))
+        {
+            return;
+        }
+
+        try
+        {
+            using var togglClient = CreateTogglClient();
+            await new BillingService(_configService, _logger).ApplyAsync(
+                togglClient,
+                new SyncResult { Success = false, Message = "Sync failed." },
+                CancellationToken.None);
+            RefreshInvoiceNumber();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Billing summary failed: {ex.Message}");
+        }
+    }
+
+    private static decimal ClampHourlyRate(decimal rate) =>
+        rate < 0 ? 0 : rate > 1_000_000m ? 1_000_000m : rate;
+
+    private static decimal ClampInvoiceNumber(int number) =>
+        number < 0 ? 0 : number > 999_999 ? 999_999 : number;
+
+    private void RefreshInvoiceNumber()
+    {
+        var saved = _configService.LoadSettings();
+        _settings.InvoiceNumber = saved.InvoiceNumber;
+        InvoiceNumberNumeric.Value = ClampInvoiceNumber(
+            InvoiceNumbers.Current(_settings, _configService.LoadInvoiceLedger()));
+    }
+
     private ISpesnetTimekeepingClient CreateSpesnetClient() =>
         _settings.UseMockSpesnet
             ? new MockSpesnetTimekeepingClient(_logger)
@@ -1231,6 +1407,7 @@ public partial class SyncForm : Form
         RefreshTogglButton.Enabled = enabled;
         RefreshSpesnetButton.Enabled = enabled;
         SaveSettingsButton.Enabled = enabled;
+        CreateTogglReportButton.Enabled = enabled;
         SaveMappingsButton.Enabled = enabled && _mappingsDirty;
     }
 

@@ -6,6 +6,8 @@ public interface ITogglClient : IDisposable
 {
     Task<TogglMe> GetMeAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TogglTimeEntry>> GetTimeEntriesSinceAsync(DateTime sinceUtc, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TogglTimeEntry>> GetTimeEntriesBetweenAsync(DateTime startUtcInclusive, DateTime endUtcExclusive, CancellationToken cancellationToken = default);
+    Task<byte[]> GetSummaryReportPdfAsync(long workspaceId, DateOnly startDate, DateOnly endDate, long userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TogglClient>> GetClientsAsync(long workspaceId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TogglProject>> GetProjectsAsync(long workspaceId, CancellationToken cancellationToken = default);
 }

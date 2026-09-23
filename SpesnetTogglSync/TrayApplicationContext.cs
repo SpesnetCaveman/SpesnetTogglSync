@@ -10,14 +10,13 @@ namespace SpesnetTogglSync;
 
 internal sealed class TrayApplicationContext : ApplicationContext
 {
-    private static readonly TimeSpan CancelWindow = TimeSpan.FromHours(1);
-
     private readonly ConfigService _configService;
     private readonly FileLogger _logger;
     private readonly SyncActivity _syncActivity;
     private readonly NotifyIcon _tray;
-    private readonly Icon _normalIcon;
-    private readonly Icon _pendingIcon;
+    private readonly Icon _waitingIcon;
+    private readonly Icon _syncedIcon;
+    private readonly Icon _problemIcon;
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _syncNowItem;
@@ -30,7 +29,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private SyncForm? _form;
     private bool _exitRequested;
-    private bool _announcedPendingWindow;
     private bool _toldUserAboutTray;
     private int _scheduleCheck;
     private string? _lastScheduleError;
@@ -52,14 +50,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _logger.Warn($"Could not update Start with Windows: {startupError}");
         }
 
+        var syncTime = DailySyncTime.Format(DailySyncTime.Parse(settings.DailySyncTime));
         _logger.Info(settings.IsRunAtStartupEnabled()
-            ? "Notification area started. Daily sync prompt at 12:00 SAST. Start with Windows is on."
-            : "Notification area started. Daily sync prompt at 12:00 SAST. Start with Windows is off.");
+            ? $"Notification area started. Daily sync at {syncTime} SAST, or as soon as this PC is on after that. Start with Windows is on."
+            : $"Notification area started. Daily sync at {syncTime} SAST, or as soon as this PC is on after that. Start with Windows is off.");
 
-        _normalIcon = CreateIcon(Color.FromArgb(0, 102, 153));
-        _pendingIcon = CreateIcon(Color.FromArgb(214, 148, 0));
+        _waitingIcon = CreateIcon(Color.FromArgb(214, 132, 0), DrawClock);
+        _syncedIcon = CreateIcon(Color.FromArgb(22, 140, 68), DrawCheck);
+        _problemIcon = CreateIcon(Color.FromArgb(192, 40, 36), DrawBang);
 
-        _statusItem = new ToolStripMenuItem("Daily sync prompt at 12:00") { Enabled = false };
+        _statusItem = new ToolStripMenuItem($"Daily sync at {syncTime}") { Enabled = false };
         var openItem = new ToolStripMenuItem("Open", null, (_, _) => ShowMainForm());
         _syncNowItem = new ToolStripMenuItem("Sync now", null, OnSyncNow);
         _cancelItem = new ToolStripMenuItem("Cancel today's sync", null, (_, _) => CancelToday());
@@ -76,8 +76,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _tray = new NotifyIcon
         {
-            Icon = _normalIcon,
-            Text = "Daily sync prompt at 12:00",
+            Icon = _waitingIcon,
+            Text = $"Daily sync at {syncTime}",
             Visible = true,
             ContextMenuStrip = _menu
         };
@@ -130,50 +130,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var scheduleFailed = false;
         try
         {
+            var settings = _configService.LoadSettings();
+            var syncTime = DailySyncTime.Parse(settings.DailySyncTime);
             var nowSa = SouthAfricaClock.Now();
             var today = nowSa.ToString("yyyy-MM-dd");
             var state = _configService.LoadAutoSyncState();
 
             if (state.CancelledDate == today || state.CompletedDate == today)
             {
-                SetPendingIcon(false);
                 return;
             }
 
-            if (state.PromptDate == today && state.DueUtc is DateTime due)
+            if (nowSa.TimeOfDay < syncTime)
             {
-                SetPendingIcon(true);
-                if (SouthAfricaClock.ToUtc(due) <= DateTime.UtcNow)
-                {
-                    if (await RunScheduledSyncAsync())
-                    {
-                        MarkCompleted(today);
-                    }
-                }
-                else if (!_announcedPendingWindow)
-                {
-                    _announcedPendingWindow = true;
-                    NotifyPrompt(SouthAfricaClock.FormatTime(due));
-                }
-
                 return;
             }
 
-            if (nowSa.TimeOfDay >= SouthAfricaClock.Midday)
+            _logger.Info(
+                $"Daily sync starting at {nowSa:HH:mm} SAST (scheduled {DailySyncTime.Format(syncTime)}, or as soon as the PC is on after that).");
+            if (await RunScheduledSyncAsync())
             {
-                var dueUtc = DateTime.SpecifyKind(DateTime.UtcNow.Add(CancelWindow), DateTimeKind.Utc);
-                state.PromptDate = today;
-                state.DueUtc = dueUtc;
-                _configService.SaveAutoSyncState(state);
-                _announcedPendingWindow = true;
-                SetPendingIcon(true);
-                var dueText = SouthAfricaClock.FormatTime(dueUtc);
-                _logger.Info($"Daily sync prompt shown. Automatic sync at {dueText} SAST unless cancelled.");
-                NotifyPrompt(dueText);
-            }
-            else
-            {
-                SetPendingIcon(false);
+                MarkCompleted(today);
             }
         }
         catch (Exception ex)
@@ -209,13 +186,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         try
         {
             _form?.SetSyncBusy(true);
-            _logger.Info("Automatic sync starting (no cancel within 1 hour).");
+            _logger.Info("Automatic sync starting.");
             var result = await ExecuteSyncAsync(_appShutdown.Token);
             if (_exitRequested)
             {
                 return false;
             }
 
+            await EnsureBillingAsync(result);
             PublishResult(result);
             return true;
         }
@@ -230,6 +208,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 _form?.ApplySyncProgress(new SyncProgressEventArgs { Message = "Sync failed." });
                 NotifyIssue(ex.Message);
+                await TryBillingAfterFailureAsync();
             }
 
             return !_exitRequested;
@@ -255,6 +234,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _form?.SetSyncBusy(true);
             var result = await ExecuteSyncAsync(_appShutdown.Token);
+            await EnsureBillingAsync(result);
             PublishResult(result);
 
             if (consumeAutomaticSlot && !_exitRequested)
@@ -270,6 +250,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _logger.Error(ex.Message);
             _form?.ApplySyncProgress(new SyncProgressEventArgs { Message = "Sync failed." });
             NotifyIssue(ex.Message);
+            if (!_exitRequested)
+            {
+                await TryBillingAfterFailureAsync();
+            }
+
             if (consumeAutomaticSlot && !_exitRequested)
             {
                 MarkCompleted(SouthAfricaClock.TodayString());
@@ -328,11 +313,45 @@ internal sealed class TrayApplicationContext : ApplicationContext
         syncService.Progress += OnProgress;
         try
         {
-            return await syncService.SyncAsync(watermarkUtc, userMappings, cache, cancellationToken);
+            var result = await syncService.SyncAsync(watermarkUtc, userMappings, cache, cancellationToken);
+            await new BillingService(_configService, _logger).ApplyAsync(togglClient, result, cancellationToken);
+            return result;
         }
         finally
         {
             syncService.Progress -= OnProgress;
+        }
+    }
+
+    private async Task EnsureBillingAsync(SyncResult result)
+    {
+        if (result.BillingNotice != null || _exitRequested)
+        {
+            return;
+        }
+
+        var settings = _configService.LoadSettings();
+        if (string.IsNullOrWhiteSpace(settings.TogglApiToken))
+        {
+            return;
+        }
+
+        using var togglClient = new TogglApiClient(settings.TogglApiToken, _logger);
+        await new BillingService(_configService, _logger).ApplyAsync(togglClient, result, _appShutdown.Token);
+    }
+
+    private async Task TryBillingAfterFailureAsync()
+    {
+        try
+        {
+            await EnsureBillingAsync(new SyncResult { Success = false, Message = "Sync failed." });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Billing summary failed: {ex.Message}");
         }
     }
 
@@ -343,9 +362,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void PublishResult(SyncResult result)
     {
+        var notice = string.IsNullOrWhiteSpace(result.BillingNotice) ? result.Message : result.BillingNotice;
         _form?.ApplySyncProgress(new SyncProgressEventArgs
         {
-            Message = result.Message,
+            Message = result.Success ? notice : result.Message,
             UpdatedWatermark = result.LastSyncedStartTime
         });
 
@@ -355,7 +375,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         else
         {
-            NotifyInfo("Sync complete", result.Message);
+            _configService.ClearSyncProblem();
+            NotifyInfo("Sync complete", notice);
         }
     }
 
@@ -396,7 +417,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         var today = SouthAfricaClock.TodayString();
         var state = _configService.LoadAutoSyncState();
-        if (state.PromptDate != today || state.CancelledDate == today || state.CompletedDate == today)
+        if (state.CancelledDate == today || state.CompletedDate == today)
         {
             return;
         }
@@ -404,7 +425,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         state.CancelledDate = today;
         _configService.SaveAutoSyncState(state);
         _logger.Info($"Automatic sync cancelled for {today}.");
-        SetPendingIcon(false);
         NotifyInfo("Daily sync cancelled", "Today's automatic sync was cancelled. You can still sync from the tray menu.");
         UpdateTrayStatus();
     }
@@ -413,10 +433,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         var today = SouthAfricaClock.TodayString();
         var state = _configService.LoadAutoSyncState();
-        return state.PromptDate == today
+        var syncTime = DailySyncTime.Parse(_configService.LoadSettings().DailySyncTime);
+        return SouthAfricaClock.Now().TimeOfDay >= syncTime
             && state.CancelledDate != today
-            && state.CompletedDate != today
-            && state.DueUtc.HasValue;
+            && state.CompletedDate != today;
     }
 
     private void MarkCompleted(string today)
@@ -424,7 +444,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var state = _configService.LoadAutoSyncState();
         state.CompletedDate = today;
         _configService.SaveAutoSyncState(state);
-        SetPendingIcon(false);
     }
 
     private void UpdateTrayStatus()
@@ -436,45 +455,61 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         var nowSa = SouthAfricaClock.Now();
         var today = nowSa.ToString("yyyy-MM-dd");
+        var syncAt = DailySyncTime.Parse(_configService.LoadSettings().DailySyncTime);
+        var syncTime = DailySyncTime.Format(syncAt);
         var state = _configService.LoadAutoSyncState();
         string text;
-        var canCancel = false;
+        Icon icon;
+        var canCancel = state.CancelledDate != today
+            && state.CompletedDate != today
+            && !_syncActivity.IsBusy;
 
-        if (state.CancelledDate == today)
+        if (state.SyncProblem)
         {
-            text = "Automatic sync cancelled for today";
+            text = string.IsNullOrWhiteSpace(state.SyncProblemMessage)
+                ? "Sync problem"
+                : state.SyncProblemMessage;
+            icon = _problemIcon;
         }
         else if (state.CompletedDate == today)
         {
-            text = "Automatic sync finished for today";
+            text = "Synced today";
+            icon = _syncedIcon;
         }
-        else if (state.PromptDate == today && state.DueUtc is DateTime due)
+        else if (_syncActivity.IsBusy)
         {
-            text = $"Automatic sync at {SouthAfricaClock.FormatTime(due)} unless cancelled";
-            canCancel = !_syncActivity.IsBusy;
+            text = "Not synced yet. Sync in progress";
+            icon = _waitingIcon;
+        }
+        else if (state.CancelledDate == today)
+        {
+            text = "Not synced. Automatic sync cancelled for today";
+            icon = _waitingIcon;
+        }
+        else if (nowSa.TimeOfDay >= syncAt)
+        {
+            text = "Not synced yet. Daily sync will run now";
+            icon = _waitingIcon;
         }
         else
         {
-            text = "Daily sync prompt at 12:00";
+            text = $"Not synced yet. Daily sync at {syncTime}";
+            icon = _waitingIcon;
         }
 
-        _statusItem.Text = text;
+        _statusItem.Text = Clip(text, 120);
         _cancelItem.Enabled = canCancel;
         _syncNowItem.Enabled = !_syncActivity.IsBusy;
+        _tray.Icon = icon;
         _tray.Text = Clip(text, 63);
     }
 
-    private void NotifyPrompt(string dueTime)
+    private void NotifyIssue(string message)
     {
-        ShowNotice(
-            NoticeKind.Prompt,
-            "Daily sync",
-            $"Time entries will sync at {dueTime} unless you cancel. Click this notification to cancel today's sync, or right-click the tray icon and choose Cancel today's sync.",
-            ToolTipIcon.Info);
-    }
-
-    private void NotifyIssue(string message) =>
+        _configService.SetSyncProblem(message);
+        UpdateTrayStatus();
         ShowNotice(NoticeKind.Issue, "Sync issue", message, ToolTipIcon.Error);
+    }
 
     private void NotifyInfo(string title, string message) =>
         ShowNotice(NoticeKind.None, title, message, ToolTipIcon.Info);
@@ -494,9 +529,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         switch (_notice)
         {
-            case NoticeKind.Prompt:
-                CancelToday();
-                break;
             case NoticeKind.Issue:
                 ShowMainForm();
                 break;
@@ -513,7 +545,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _toldUserAboutTray = true;
         NotifyInfo(
             "Still running",
-            "The app stays in the notification area and asks before the daily 12:00 sync. Right-click the icon and choose Exit to quit.");
+            "The app stays in the notification area and syncs each day after the time in Settings. Right-click the icon and choose Exit to quit.");
     }
 
     private void ShowMainForm()
@@ -525,6 +557,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         _form.OnSyncIssue = NotifyIssue;
+        _form.OnSyncSucceeded = () =>
+        {
+            _configService.ClearSyncProblem();
+            UpdateTrayStatus();
+        };
 
         if (!_form.Visible)
         {
@@ -578,15 +615,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ExitThread();
     }
 
-    private void SetPendingIcon(bool pending)
-    {
-        var icon = pending ? _pendingIcon : _normalIcon;
-        if (!ReferenceEquals(_tray.Icon, icon))
-        {
-            _tray.Icon = icon;
-        }
-    }
-
     private void Post(Action action)
     {
         if (_ui.IsDisposed)
@@ -615,20 +643,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
         return string.Concat(text.AsSpan(0, max - 3), "...");
     }
 
-    private static Icon CreateIcon(Color background)
+    private static Icon CreateIcon(Color background, Action<Graphics> drawGlyph)
     {
         using var bitmap = new Bitmap(32, 32, PixelFormat.Format32bppArgb);
         using (var graphics = Graphics.FromImage(bitmap))
         {
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             graphics.Clear(Color.Transparent);
             using var brush = new SolidBrush(background);
             graphics.FillEllipse(brush, 1, 1, 30, 30);
-            using var font = new Font(FontFamily.GenericSansSerif, 16, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var textBrush = new SolidBrush(Color.White);
-            const string letter = "S";
-            var size = graphics.MeasureString(letter, font);
-            graphics.DrawString(letter, font, textBrush, (32 - size.Width) / 2f, (32 - size.Height) / 2f);
+            drawGlyph(graphics);
         }
 
         var handle = bitmap.GetHicon();
@@ -643,6 +668,36 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private static void DrawClock(Graphics graphics)
+    {
+        using var pen = new Pen(Color.White, 2.4f)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
+        graphics.DrawEllipse(pen, 8.5f, 8.5f, 15f, 15f);
+        graphics.DrawLine(pen, 16f, 16f, 16f, 11f);
+        graphics.DrawLine(pen, 16f, 16f, 21f, 18f);
+    }
+
+    private static void DrawCheck(Graphics graphics)
+    {
+        using var pen = new Pen(Color.White, 3.2f)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+        graphics.DrawLines(pen, [new PointF(8f, 17f), new PointF(14f, 23f), new PointF(24f, 10f)]);
+    }
+
+    private static void DrawBang(Graphics graphics)
+    {
+        using var brush = new SolidBrush(Color.White);
+        graphics.FillRectangle(brush, 14, 6, 4, 14);
+        graphics.FillEllipse(brush, 13, 22, 6, 6);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -654,8 +709,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _tray.Visible = false;
             _tray.Dispose();
             _menu.Dispose();
-            _normalIcon.Dispose();
-            _pendingIcon.Dispose();
+            _waitingIcon.Dispose();
+            _syncedIcon.Dispose();
+            _problemIcon.Dispose();
             _ui.Dispose();
             _appShutdown.Dispose();
         }
@@ -669,7 +725,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private enum NoticeKind
     {
         None,
-        Prompt,
         Issue
     }
 }

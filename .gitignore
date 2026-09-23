@@ -63,3 +63,8 @@ SpesnetTogglSync/config-location.json
 SpesnetTogglSync/mappings.json
 SpesnetTogglSync/syncstate.json
 SpesnetTogglSync/autosync.json
+SpesnetTogglSync/invoice-numbers.json
+invoice-numbers.json
+invoice-template.docx
+toggl-summary.json
+toggl-summary.pdf

@@ -7,13 +7,16 @@ namespace SpesnetTogglSync.Services;
 public class ConfigService
 {
     public const string ConfigLocationFileName = "config-location.json";
+    public const string InvoiceTemplateFileName = "invoice-template.docx";
 
     private static readonly string[] DataFileNames =
     [
         "appsettings.json",
         "mappings.json",
         "syncstate.json",
-        "autosync.json"
+        "autosync.json",
+        "invoice-numbers.json",
+        InvoiceTemplateFileName
     ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -43,6 +46,10 @@ public class ConfigService
     private string SyncStatePath => Path.Combine(_baseDirectory, "syncstate.json");
     private string MappingsPath => Path.Combine(_baseDirectory, "mappings.json");
     private string AutoSyncStatePath => Path.Combine(_baseDirectory, "autosync.json");
+    private string InvoiceLedgerPath => Path.Combine(_baseDirectory, "invoice-numbers.json");
+
+    /// <summary>App-owned invoice template. Invoices are filled from this file, not from the original.</summary>
+    public string AppInvoiceTemplatePath => Path.Combine(_baseDirectory, InvoiceTemplateFileName);
     private string ConfigLocationPath => Path.Combine(_installDirectory, ConfigLocationFileName);
 
     /// <summary>
@@ -140,6 +147,64 @@ public class ConfigService
 
     public void SaveAutoSyncState(AutoSyncState state) => WriteJson(AutoSyncStatePath, state);
 
+    public InvoiceNumberLedger LoadInvoiceLedger()
+    {
+        var ledger = ReadJson<InvoiceNumberLedger>(InvoiceLedgerPath) ?? new InvoiceNumberLedger();
+        ledger.Periods ??= [];
+        return ledger;
+    }
+
+    public void SaveInvoiceLedger(InvoiceNumberLedger ledger) => WriteJson(InvoiceLedgerPath, ledger);
+
+    /// <summary>
+    /// Records today's automatic sync as done when the clock is already past the daily sync time,
+    /// so a manual sync does not get repeated by the tray.
+    /// </summary>
+    public void MarkAutomaticSyncCompletedIfDue()
+    {
+        var syncTime = DailySyncTime.Parse(LoadSettings().DailySyncTime);
+        if (SouthAfricaClock.Now().TimeOfDay < syncTime)
+        {
+            return;
+        }
+
+        var today = SouthAfricaClock.TodayString();
+        var state = LoadAutoSyncState();
+        if (state.CompletedDate == today || state.CancelledDate == today)
+        {
+            return;
+        }
+
+        state.CompletedDate = today;
+        SaveAutoSyncState(state);
+    }
+
+    public void SetSyncProblem(string message)
+    {
+        var state = LoadAutoSyncState();
+        if (state.SyncProblem && string.Equals(state.SyncProblemMessage, message, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        state.SyncProblem = true;
+        state.SyncProblemMessage = message;
+        SaveAutoSyncState(state);
+    }
+
+    public void ClearSyncProblem()
+    {
+        var state = LoadAutoSyncState();
+        if (!state.SyncProblem && string.IsNullOrEmpty(state.SyncProblemMessage))
+        {
+            return;
+        }
+
+        state.SyncProblem = false;
+        state.SyncProblemMessage = null;
+        SaveAutoSyncState(state);
+    }
+
     public MappingsFile LoadMappings()
     {
         return ReadJson<MappingsFile>(MappingsPath) ?? new MappingsFile();
@@ -213,20 +278,51 @@ public class ConfigService
 
         var sourceLogs = Path.Combine(sourceDirectory, "logs");
         var targetLogs = Path.Combine(targetDirectory, "logs");
-        if (!Directory.Exists(sourceLogs))
+        if (Directory.Exists(sourceLogs))
         {
-            return;
-        }
-
-        Directory.CreateDirectory(targetLogs);
-        foreach (var sourceLog in Directory.EnumerateFiles(sourceLogs))
-        {
-            var targetLog = Path.Combine(targetLogs, Path.GetFileName(sourceLog));
-            if (!File.Exists(targetLog))
+            Directory.CreateDirectory(targetLogs);
+            foreach (var sourceLog in Directory.EnumerateFiles(sourceLogs))
             {
-                File.Copy(sourceLog, targetLog);
+                var targetLog = Path.Combine(targetLogs, Path.GetFileName(sourceLog));
+                if (!File.Exists(targetLog))
+                {
+                    File.Copy(sourceLog, targetLog);
+                }
             }
         }
+
+        foreach (var sourceFolder in Directory.EnumerateDirectories(sourceDirectory))
+        {
+            var name = Path.GetFileName(sourceFolder);
+            if (!IsBillingReportFolder(name))
+            {
+                continue;
+            }
+
+            var targetFolder = Path.Combine(targetDirectory, name);
+            foreach (var sourceFile in Directory.EnumerateFiles(sourceFolder))
+            {
+                var targetFile = Path.Combine(targetFolder, Path.GetFileName(sourceFile));
+                if (File.Exists(targetFile))
+                {
+                    continue;
+                }
+
+                Directory.CreateDirectory(targetFolder);
+                File.Copy(sourceFile, targetFile);
+            }
+        }
+    }
+
+    private static bool IsBillingReportFolder(string name)
+    {
+        if (name.Length != 7 || name[4] != '-')
+        {
+            return false;
+        }
+
+        return int.TryParse(name.AsSpan(0, 4), out var year) && year is >= 2000 and <= 2100
+            && int.TryParse(name.AsSpan(5, 2), out var month) && month is >= 1 and <= 12;
     }
 
     private T? ReadJson<T>(string path) where T : class

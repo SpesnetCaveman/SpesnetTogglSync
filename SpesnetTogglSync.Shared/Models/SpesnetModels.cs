@@ -131,7 +131,11 @@ public class SyncResult
     public string Message { get; set; } = string.Empty;
     public int SyncedCount { get; set; }
     public int SkippedCount { get; set; }
+    public long SyncedSeconds { get; set; }
     public DateTime? LastSyncedStartTime { get; set; }
+
+    /// <summary>Hours and earnings for the tray notification, when billing data could be loaded.</summary>
+    public string? BillingNotice { get; set; }
 }
 
 public class SyncProgressEventArgs : EventArgs

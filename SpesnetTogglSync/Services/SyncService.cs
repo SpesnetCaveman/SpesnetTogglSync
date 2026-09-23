@@ -6,7 +6,7 @@ namespace SpesnetTogglSync.Services;
 
 public class SyncService
 {
-    private const double MaxHoursPerEntry = 8.0;
+    private const decimal MaxHoursPerEntry = 8.0m;
 
     /// <summary>Spesnet work dates are South African (GMT+2); SA has no DST.</summary>
     private static readonly TimeZoneInfo SouthAfricaTimeZone = ResolveSouthAfricaTimeZone();
@@ -117,6 +117,7 @@ public class SyncService
         LogOverlappingEntries(candidateEntries);
 
         var syncedCount = 0;
+        var syncedSeconds = 0L;
         var currentWatermark = watermarkUtc;
 
         if (candidateEntries.Count == 0 && blockReason == null)
@@ -148,15 +149,25 @@ public class SyncService
 
                 var mapping = FindEntryMapping(mappings, entry)!;
                 var workDoneEntries = TransformEntry(entry, employeeId, mapping);
-                var request = new SpesnetSaveWorkRequest { WorkDoneList = workDoneEntries };
-
-                Report($"Syncing Toggl entry {entry.Id} ({FormatSouthAfricaDateTime(entry.StartUtc)} SAST)...");
-                await _spesnetClient.SaveWorkEntriesAsync(request, cancellationToken);
+                if (workDoneEntries.Count == 0)
+                {
+                    _logger.Info($"Toggl entry {entry.Id} rounds to 0.00h; nothing sent to Spesnet.");
+                }
+                else
+                {
+                    var request = new SpesnetSaveWorkRequest { WorkDoneList = workDoneEntries };
+                    Report($"Syncing Toggl entry {entry.Id} ({FormatSouthAfricaDateTime(entry.StartUtc)} SAST)...");
+                    await _spesnetClient.SaveWorkEntriesAsync(request, cancellationToken);
+                }
 
                 // Exclusive watermark: next sync only takes entries with start > this value.
                 // Never set this to the blocked entry's start (or an equal start), or that entry is skipped forever.
                 currentWatermark = ToUtc(entry.StartUtc);
                 syncedCount++;
+                if (entry.Duration > 0)
+                {
+                    syncedSeconds += entry.Duration;
+                }
 
                 var syncState = new SyncState { LastSyncedStartTime = currentWatermark };
                 _configService.SaveSyncState(syncState);
@@ -189,6 +200,7 @@ public class SyncService
                 Message = stoppedMessage,
                 SyncedCount = syncedCount,
                 SkippedCount = skippedCount,
+                SyncedSeconds = syncedSeconds,
                 LastSyncedStartTime = currentWatermark
             };
         }
@@ -202,14 +214,33 @@ public class SyncService
             Message = summary,
             SyncedCount = syncedCount,
             SkippedCount = skippedCount,
+            SyncedSeconds = syncedSeconds,
             LastSyncedStartTime = currentWatermark
         };
     }
 
     /// <summary>
+    /// True when this entry still has to be written to Spesnet. Permanent Ignore does not.
+    /// </summary>
+    internal static bool StillNeedsSync(UserMappings mappings, TogglTimeEntry entry, DateTime? watermarkUtc)
+    {
+        if (IsPermanentIgnore(mappings, entry))
+        {
+            return false;
+        }
+
+        if (watermarkUtc is not DateTime watermark)
+        {
+            return true;
+        }
+
+        return SouthAfricaClock.ToUtc(entry.StartUtc) > SouthAfricaClock.ToUtc(watermark);
+    }
+
+    /// <summary>
     /// Client-level or entry Ignore. These entries are never synced, so the watermark may move past them.
     /// </summary>
-    private bool IsPermanentIgnore(UserMappings mappings, TogglTimeEntry entry)
+    internal static bool IsPermanentIgnore(UserMappings mappings, TogglTimeEntry entry)
     {
         if (!entry.ClientId.HasValue || string.IsNullOrWhiteSpace(entry.ClientName))
         {
@@ -502,8 +533,8 @@ public class SyncService
         int employeeId,
         EntryMapping mapping)
     {
-        var totalHours = entry.Duration / 3600.0;
-        var remaining = totalHours;
+        // Spesnet only handles hours on a 0.05 grid (6.66 → 6.65, 6.68 → 6.70).
+        var remaining = RoundHoursToFiveHundredths(entry.Duration);
         // Spesnet expects the start in South African time (GMT+2), not UTC.
         var txDateTime = ToSpesnetTxDateTime(entry.StartUtc);
         // Description is validated before write; whitespace-only is rejected earlier.
@@ -512,12 +543,12 @@ public class SyncService
 
         while (remaining > 0)
         {
-            var chunkHours = Math.Min(remaining, MaxHoursPerEntry);
+            var chunkHours = remaining > MaxHoursPerEntry ? MaxHoursPerEntry : remaining;
             result.Add(new SpesnetWorkDoneEntry
             {
                 Comment = comment,
                 EmployeeId = employeeId,
-                NormalHours = chunkHours,
+                NormalHours = (double)chunkHours,
                 OvertimeHours = 0,
                 ProjectId = mapping.SpesnetProjectId,
                 ClientId = mapping.SpesnetClientId,
@@ -528,6 +559,14 @@ public class SyncService
         }
 
         return result;
+    }
+
+    /// <summary>Nearest 0.05 hour. 0.05h is 180 seconds. Halves round away from zero.</summary>
+    private static decimal RoundHoursToFiveHundredths(long seconds)
+    {
+        const decimal secondsPerStep = 180m;
+        var steps = decimal.Round(seconds / secondsPerStep, 0, MidpointRounding.AwayFromZero);
+        return steps * 0.05m;
     }
 
     private void Report(string message, DateTime? updatedWatermark = null)

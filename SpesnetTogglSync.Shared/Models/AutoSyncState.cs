@@ -13,4 +13,19 @@ public class AutoSyncState
     public string? CancelledDate { get; set; }
 
     public string? CompletedDate { get; set; }
+
+    /// <summary>
+    /// True after a sync stops or fails. Cleared by the next successful sync.
+    /// The tray icon stays on the problem state until then.
+    /// </summary>
+    public bool SyncProblem { get; set; }
+
+    /// <summary>Reason shown on the tray while <see cref="SyncProblem"/> is set.</summary>
+    public string? SyncProblemMessage { get; set; }
+
+    /// <summary>
+    /// South African date (yyyy-MM-dd) of the cycle start whose previous period
+    /// has already been written to the yyyy-MM report folder.
+    /// </summary>
+    public string? BillingReportCycleStart { get; set; }
 }

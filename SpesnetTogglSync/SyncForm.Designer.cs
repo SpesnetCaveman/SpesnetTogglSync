@@ -19,6 +19,7 @@
             syncFromLabel = new Label();
             StartSyncDateTimeControl = new DateTimePicker();
             StartSyncButton = new Button();
+            CreateTogglReportButton = new Button();
             StatusLabel = new Label();
             UseMockSpesnetCheckBox = new CheckBox();
             mainTabControl = new TabControl();
@@ -33,6 +34,21 @@
             settingsTabPage = new TabPage();
             SaveSettingsButton = new Button();
             RunAtStartupCheckBox = new CheckBox();
+            BrowseInvoiceTemplateButton = new Button();
+            InvoiceTemplateTextBox = new TextBox();
+            invoiceTemplateLabel = new Label();
+            billingCycleNoteLabel = new Label();
+            BrowseBillingReportDirectoryButton = new Button();
+            BillingReportDirectoryTextBox = new TextBox();
+            billingReportDirectoryLabel = new Label();
+            DailySyncTimePicker = new DateTimePicker();
+            dailySyncTimeLabel = new Label();
+            BillingCycleStartDayNumeric = new NumericUpDown();
+            billingCycleStartDayLabel = new Label();
+            HourlyRateNumeric = new NumericUpDown();
+            InvoiceNumberNumeric = new NumericUpDown();
+            invoiceNumberLabel = new Label();
+            hourlyRateLabel = new Label();
             DataDirectoryTextBox = new TextBox();
             dataDirectoryLabel = new Label();
             SpesnetDomainTextBox = new TextBox();
@@ -56,6 +72,9 @@
             mappingTabPage.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)MappingGrid).BeginInit();
             settingsTabPage.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)BillingCycleStartDayNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)HourlyRateNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)InvoiceNumberNumeric).BeginInit();
             SuspendLayout();
             // 
             // topPanel
@@ -63,6 +82,7 @@
             topPanel.Controls.Add(syncFromLabel);
             topPanel.Controls.Add(StartSyncDateTimeControl);
             topPanel.Controls.Add(StartSyncButton);
+            topPanel.Controls.Add(CreateTogglReportButton);
             topPanel.Controls.Add(StatusLabel);
             topPanel.Controls.Add(UseMockSpesnetCheckBox);
             topPanel.Dock = DockStyle.Top;
@@ -101,6 +121,16 @@
             StartSyncButton.UseVisualStyleBackColor = true;
             StartSyncButton.Click += StartSyncButton_Click;
             // 
+            // CreateTogglReportButton
+            // 
+            CreateTogglReportButton.Location = new Point(422, 14);
+            CreateTogglReportButton.Name = "CreateTogglReportButton";
+            CreateTogglReportButton.Size = new Size(216, 29);
+            CreateTogglReportButton.TabIndex = 5;
+            CreateTogglReportButton.Text = "Create invoice and report";
+            CreateTogglReportButton.UseVisualStyleBackColor = true;
+            CreateTogglReportButton.Click += CreateTogglReportButton_Click;
+            // 
             // StatusLabel
             // 
             StatusLabel.AutoEllipsis = true;
@@ -115,7 +145,7 @@
             UseMockSpesnetCheckBox.AutoSize = true;
             UseMockSpesnetCheckBox.Checked = true;
             UseMockSpesnetCheckBox.CheckState = CheckState.Checked;
-            UseMockSpesnetCheckBox.Location = new Point(428, 16);
+            UseMockSpesnetCheckBox.Location = new Point(694, 16);
             UseMockSpesnetCheckBox.Name = "UseMockSpesnetCheckBox";
             UseMockSpesnetCheckBox.Size = new Size(151, 24);
             UseMockSpesnetCheckBox.TabIndex = 4;
@@ -132,7 +162,7 @@
             mainTabControl.Location = new Point(0, 72);
             mainTabControl.Name = "mainTabControl";
             mainTabControl.SelectedIndex = 0;
-            mainTabControl.Size = new Size(1550, 489);
+            mainTabControl.Size = new Size(1550, 641);
             mainTabControl.TabIndex = 1;
             // 
             // logTabPage
@@ -141,7 +171,7 @@
             logTabPage.Location = new Point(4, 29);
             logTabPage.Name = "logTabPage";
             logTabPage.Padding = new Padding(8);
-            logTabPage.Size = new Size(1542, 456);
+            logTabPage.Size = new Size(1542, 608);
             logTabPage.TabIndex = 0;
             logTabPage.Text = "Sync Log";
             logTabPage.UseVisualStyleBackColor = true;
@@ -154,7 +184,7 @@
             LogTextBox.Name = "LogTextBox";
             LogTextBox.ReadOnly = true;
             LogTextBox.ScrollBars = ScrollBars.Vertical;
-            LogTextBox.Size = new Size(1526, 440);
+            LogTextBox.Size = new Size(1526, 592);
             LogTextBox.TabIndex = 0;
             // 
             // mappingTabPage
@@ -229,6 +259,21 @@
             // 
             settingsTabPage.Controls.Add(SaveSettingsButton);
             settingsTabPage.Controls.Add(RunAtStartupCheckBox);
+            settingsTabPage.Controls.Add(BrowseInvoiceTemplateButton);
+            settingsTabPage.Controls.Add(InvoiceTemplateTextBox);
+            settingsTabPage.Controls.Add(invoiceTemplateLabel);
+            settingsTabPage.Controls.Add(billingCycleNoteLabel);
+            settingsTabPage.Controls.Add(BrowseBillingReportDirectoryButton);
+            settingsTabPage.Controls.Add(BillingReportDirectoryTextBox);
+            settingsTabPage.Controls.Add(billingReportDirectoryLabel);
+            settingsTabPage.Controls.Add(DailySyncTimePicker);
+            settingsTabPage.Controls.Add(dailySyncTimeLabel);
+            settingsTabPage.Controls.Add(BillingCycleStartDayNumeric);
+            settingsTabPage.Controls.Add(billingCycleStartDayLabel);
+            settingsTabPage.Controls.Add(HourlyRateNumeric);
+            settingsTabPage.Controls.Add(InvoiceNumberNumeric);
+            settingsTabPage.Controls.Add(invoiceNumberLabel);
+            settingsTabPage.Controls.Add(hourlyRateLabel);
             settingsTabPage.Controls.Add(DataDirectoryTextBox);
             settingsTabPage.Controls.Add(dataDirectoryLabel);
             settingsTabPage.Controls.Add(SpesnetDomainTextBox);
@@ -249,7 +294,7 @@
             // 
             // SaveSettingsButton
             // 
-            SaveSettingsButton.Location = new Point(12, 324);
+            SaveSettingsButton.Location = new Point(12, 556);
             SaveSettingsButton.Name = "SaveSettingsButton";
             SaveSettingsButton.Size = new Size(130, 29);
             SaveSettingsButton.TabIndex = 14;
@@ -260,12 +305,153 @@
             // RunAtStartupCheckBox
             // 
             RunAtStartupCheckBox.AutoSize = true;
-            RunAtStartupCheckBox.Location = new Point(12, 286);
+            RunAtStartupCheckBox.Location = new Point(12, 516);
             RunAtStartupCheckBox.Name = "RunAtStartupCheckBox";
-            RunAtStartupCheckBox.Size = new Size(530, 24);
+            RunAtStartupCheckBox.Size = new Size(523, 24);
             RunAtStartupCheckBox.TabIndex = 13;
-            RunAtStartupCheckBox.Text = "Start with Windows (notification area, daily sync prompt at 12:00)";
+            RunAtStartupCheckBox.Text = "Start with Windows (notification area; daily sync runs after the time above)";
             RunAtStartupCheckBox.UseVisualStyleBackColor = true;
+            // 
+            // BrowseInvoiceTemplateButton
+            // 
+            BrowseInvoiceTemplateButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            BrowseInvoiceTemplateButton.Location = new Point(1396, 465);
+            BrowseInvoiceTemplateButton.Name = "BrowseInvoiceTemplateButton";
+            BrowseInvoiceTemplateButton.Size = new Size(130, 29);
+            BrowseInvoiceTemplateButton.TabIndex = 19;
+            BrowseInvoiceTemplateButton.Text = "Import...";
+            BrowseInvoiceTemplateButton.UseVisualStyleBackColor = true;
+            BrowseInvoiceTemplateButton.Click += BrowseInvoiceTemplateButton_Click;
+            // 
+            // InvoiceTemplateTextBox
+            // 
+            InvoiceTemplateTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            InvoiceTemplateTextBox.Location = new Point(11, 467);
+            InvoiceTemplateTextBox.Name = "InvoiceTemplateTextBox";
+            InvoiceTemplateTextBox.ReadOnly = true;
+            InvoiceTemplateTextBox.Size = new Size(1370, 27);
+            InvoiceTemplateTextBox.TabIndex = 18;
+            // 
+            // invoiceTemplateLabel
+            // 
+            invoiceTemplateLabel.AutoSize = true;
+            invoiceTemplateLabel.Location = new Point(11, 444);
+            invoiceTemplateLabel.Name = "invoiceTemplateLabel";
+            invoiceTemplateLabel.Size = new Size(170, 20);
+            invoiceTemplateLabel.TabIndex = 17;
+            invoiceTemplateLabel.Text = "Invoice template (app copy)";
+            // 
+            // billingCycleNoteLabel
+            // 
+            billingCycleNoteLabel.Location = new Point(11, 336);
+            billingCycleNoteLabel.Name = "billingCycleNoteLabel";
+            billingCycleNoteLabel.Size = new Size(1500, 40);
+            billingCycleNoteLabel.TabIndex = 12;
+            billingCycleNoteLabel.Text = "Each cycle runs from this day through the day before it next month. 20 means the 20th through the 19th. The Toggl report for a finished cycle is saved after that cycle has fully synced.";
+            // 
+            // BrowseBillingReportDirectoryButton
+            // 
+            BrowseBillingReportDirectoryButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            BrowseBillingReportDirectoryButton.Location = new Point(1396, 405);
+            BrowseBillingReportDirectoryButton.Name = "BrowseBillingReportDirectoryButton";
+            BrowseBillingReportDirectoryButton.Size = new Size(130, 29);
+            BrowseBillingReportDirectoryButton.TabIndex = 16;
+            BrowseBillingReportDirectoryButton.Text = "Browse...";
+            BrowseBillingReportDirectoryButton.UseVisualStyleBackColor = true;
+            BrowseBillingReportDirectoryButton.Click += BrowseBillingReportDirectoryButton_Click;
+            // 
+            // BillingReportDirectoryTextBox
+            // 
+            BillingReportDirectoryTextBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            BillingReportDirectoryTextBox.Location = new Point(11, 407);
+            BillingReportDirectoryTextBox.Name = "BillingReportDirectoryTextBox";
+            BillingReportDirectoryTextBox.Size = new Size(1370, 27);
+            BillingReportDirectoryTextBox.TabIndex = 15;
+            // 
+            // billingReportDirectoryLabel
+            // 
+            billingReportDirectoryLabel.AutoSize = true;
+            billingReportDirectoryLabel.Location = new Point(11, 384);
+            billingReportDirectoryLabel.Name = "billingReportDirectoryLabel";
+            billingReportDirectoryLabel.Size = new Size(387, 20);
+            billingReportDirectoryLabel.TabIndex = 14;
+            billingReportDirectoryLabel.Text = "Billing report folder (empty saves into the data directory)";
+            // 
+            // DailySyncTimePicker
+            // 
+            DailySyncTimePicker.CustomFormat = "HH:mm";
+            DailySyncTimePicker.Format = DateTimePickerFormat.Custom;
+            DailySyncTimePicker.Location = new Point(420, 301);
+            DailySyncTimePicker.Name = "DailySyncTimePicker";
+            DailySyncTimePicker.ShowUpDown = true;
+            DailySyncTimePicker.Size = new Size(120, 27);
+            DailySyncTimePicker.TabIndex = 13;
+            DailySyncTimePicker.Value = new DateTime(2026, 1, 1, 7, 0, 0, 0);
+            // 
+            // dailySyncTimeLabel
+            // 
+            dailySyncTimeLabel.AutoSize = true;
+            dailySyncTimeLabel.Location = new Point(420, 278);
+            dailySyncTimeLabel.Name = "dailySyncTimeLabel";
+            dailySyncTimeLabel.Size = new Size(157, 20);
+            dailySyncTimeLabel.TabIndex = 11;
+            dailySyncTimeLabel.Text = "Daily sync time (SAST)";
+            // 
+            // BillingCycleStartDayNumeric
+            // 
+            BillingCycleStartDayNumeric.Location = new Point(220, 301);
+            BillingCycleStartDayNumeric.Maximum = new decimal(new int[] { 31, 0, 0, 0 });
+            BillingCycleStartDayNumeric.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
+            BillingCycleStartDayNumeric.Name = "BillingCycleStartDayNumeric";
+            BillingCycleStartDayNumeric.Size = new Size(80, 27);
+            BillingCycleStartDayNumeric.TabIndex = 12;
+            BillingCycleStartDayNumeric.Value = new decimal(new int[] { 20, 0, 0, 0 });
+            // 
+            // billingCycleStartDayLabel
+            // 
+            billingCycleStartDayLabel.AutoSize = true;
+            billingCycleStartDayLabel.Location = new Point(220, 278);
+            billingCycleStartDayLabel.Name = "billingCycleStartDayLabel";
+            billingCycleStartDayLabel.Size = new Size(149, 20);
+            billingCycleStartDayLabel.TabIndex = 11;
+            billingCycleStartDayLabel.Text = "Billing cycle start day";
+            // 
+            // HourlyRateNumeric
+            // 
+            HourlyRateNumeric.DecimalPlaces = 2;
+            HourlyRateNumeric.Increment = new decimal(new int[] { 10, 0, 0, 0 });
+            HourlyRateNumeric.Location = new Point(11, 301);
+            HourlyRateNumeric.Maximum = new decimal(new int[] { 1000000, 0, 0, 0 });
+            HourlyRateNumeric.Name = "HourlyRateNumeric";
+            HourlyRateNumeric.Size = new Size(140, 27);
+            HourlyRateNumeric.TabIndex = 11;
+            HourlyRateNumeric.ThousandsSeparator = true;
+            // 
+            // invoiceNumberLabel
+            // 
+            invoiceNumberLabel.AutoSize = true;
+            invoiceNumberLabel.Location = new Point(580, 278);
+            invoiceNumberLabel.Name = "invoiceNumberLabel";
+            invoiceNumberLabel.Size = new Size(220, 20);
+            invoiceNumberLabel.TabIndex = 11;
+            invoiceNumberLabel.Text = "Invoice number";
+            // 
+            // InvoiceNumberNumeric
+            // 
+            InvoiceNumberNumeric.Location = new Point(580, 301);
+            InvoiceNumberNumeric.Maximum = new decimal(new int[] { 999999, 0, 0, 0 });
+            InvoiceNumberNumeric.Name = "InvoiceNumberNumeric";
+            InvoiceNumberNumeric.Size = new Size(100, 27);
+            InvoiceNumberNumeric.TabIndex = 14;
+            // 
+            // hourlyRateLabel
+            // 
+            hourlyRateLabel.AutoSize = true;
+            hourlyRateLabel.Location = new Point(11, 278);
+            hourlyRateLabel.Name = "hourlyRateLabel";
+            hourlyRateLabel.Size = new Size(125, 20);
+            hourlyRateLabel.TabIndex = 11;
+            hourlyRateLabel.Text = "Hourly rate (ZAR)";
             // 
             // DataDirectoryTextBox
             // 
@@ -406,10 +592,10 @@
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1550, 561);
+            ClientSize = new Size(1550, 713);
             Controls.Add(mainTabControl);
             Controls.Add(topPanel);
-            MinimumSize = new Size(1550, 600);
+            MinimumSize = new Size(1550, 760);
             Name = "SyncForm";
             Text = "Toggl to Spesnet Sync";
             FormClosing += SyncForm_FormClosing;
@@ -424,6 +610,9 @@
             ((System.ComponentModel.ISupportInitialize)MappingGrid).EndInit();
             settingsTabPage.ResumeLayout(false);
             settingsTabPage.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)BillingCycleStartDayNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)HourlyRateNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)InvoiceNumberNumeric).EndInit();
             ResumeLayout(false);
         }
 
@@ -453,7 +642,23 @@
         private TextBox SpesnetDomainTextBox;
         private Label dataDirectoryLabel;
         private TextBox DataDirectoryTextBox;
+        private Label hourlyRateLabel;
+        private NumericUpDown HourlyRateNumeric;
+        private Label invoiceNumberLabel;
+        private NumericUpDown InvoiceNumberNumeric;
+        private Label billingCycleStartDayLabel;
+        private NumericUpDown BillingCycleStartDayNumeric;
+        private Label billingCycleNoteLabel;
+        private Label dailySyncTimeLabel;
+        private DateTimePicker DailySyncTimePicker;
+        private Label billingReportDirectoryLabel;
+        private TextBox BillingReportDirectoryTextBox;
+        private Button BrowseBillingReportDirectoryButton;
+        private Label invoiceTemplateLabel;
+        private TextBox InvoiceTemplateTextBox;
+        private Button BrowseInvoiceTemplateButton;
         private Button SaveSettingsButton;
+        private Button CreateTogglReportButton;
         private CheckBox RunAtStartupCheckBox;
         private DataGridViewComboBoxColumn StatusColumn;
         private DataGridViewComboBoxColumn TogglClientColumn;

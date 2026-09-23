@@ -8,11 +8,11 @@ alwaysApply: false
 
 ## Layout
 
-- Top bar: watermark DateTimePicker, Start Sync, mock checkbox, status.
+- Top bar: watermark DateTimePicker, Start Sync, Create report, mock checkbox, status.
 - Tabs: Sync Log, Mapping, Settings.
 - Mapping toolbar: Save Mappings, dirty label, Refresh Spesnet Reference Data, Refresh from Toggl.
 - Prefer editing `SyncForm.Designer.cs` for control layout; keep async/event wiring in `SyncForm.cs`.
-- Settings includes Data Directory (writes `config-location.json` on Save Settings; creates folder and missing config files; copies from previous data dir when the new folder lacks them).
+- Settings includes Data Directory (writes `config-location.json` on Save Settings; creates folder and missing config files; copies from previous data dir when the new folder lacks them), hourly rate (ZAR), billing-cycle start day (1–31; shorter months use the last day), daily sync time (SAST, default 07:00), billing report folder (empty uses the data directory), invoice number (latest issued; a new period uses the next number and updates it), and the app invoice template (`invoice-template.docx` in the data directory; Import replaces that copy).
 
 ## Mapping grid
 
@@ -29,6 +29,7 @@ alwaysApply: false
 - Marshal logger UI updates with `Invoke`/`BeginInvoke` when needed.
 - On load: restore watermark, settings, mappings; optionally auto-load Spesnet reference (especially mock).
 - Require Spesnet reference cache. A `New` mapping stops sync at the first matching entry; earlier entries still sync.
-- The process lives in the notification area (`TrayApplicationContext`). Closing the form hides it; Exit is on the tray menu. `--tray` starts hidden (Windows startup).
-- Daily prompt at 12:00 SAST; cancel within 1 hour or sync runs without showing the form. Sync failures (including a missing description) use a tray balloon. Schedule state is `autosync.json`, not `syncstate.json`.
+- The process lives in the notification area (`TrayApplicationContext`). The icon is amber with a clock until today's sync finishes, green with a check after it finishes, and red with an exclamation while a sync problem is unresolved (`AutoSyncState.SyncProblem`, cleared by the next successful sync). Closing the form hides it; Exit is on the tray menu. `--tray` starts hidden (Windows startup).
+- Daily sync at the Settings time (default 07:00 SAST). If the PC is off then, the next launch that day syncs immediately. Cancel today's sync on the tray menu skips that run. Sync failures (including a missing description) use a tray balloon. A finished sync balloon shows hours synced × hourly rate, and hours plus earnings for the open billing cycle. Schedule state is `autosync.json`, not `syncstate.json`.
+- The first sync on or after a cycle start saves the previous cycle's Toggl summary PDF and invoice PDF under `{billing report folder}/{yyyy-MM}/` (yyyy-MM is the month that cycle started). The timesheet file is `toggle timesheet report {start} to {end}.pdf`. It waits while any non-Ignore entry in that finished cycle is still unsynced. If that sync did not run, the next daily sync still saves it. **Create report** sits next to Start Sync and saves both files immediately. Regenerating a period reuses its invoice number. Example: start day 20, run on 22 Sep 2026 → folder `2026-09`, period 20 Aug 2026–19 Sep 2026.
 - One sync at a time via `SyncActivity`. Background watermark updates must go through `ApplySyncProgress` so closing the form cannot roll the watermark back.

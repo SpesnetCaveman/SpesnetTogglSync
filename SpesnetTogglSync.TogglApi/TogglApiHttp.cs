@@ -51,12 +51,15 @@ internal sealed class TogglApiHttp : IDisposable
         object? payload = null,
         CancellationToken cancellationToken = default)
     {
-        var requestUrl = new Uri(_httpClient.BaseAddress!, relativeUrl).ToString();
+        var requestUri = Uri.TryCreate(relativeUrl, UriKind.Absolute, out var absolute)
+            ? absolute
+            : new Uri(_httpClient.BaseAddress!, relativeUrl);
+        var requestUrl = requestUri.ToString();
         var requestPayload = payload is null
             ? null
             : JsonSerializer.Serialize(payload, PayloadJsonOptions);
 
-        using var request = new HttpRequestMessage(method, relativeUrl);
+        using var request = new HttpRequestMessage(method, requestUri);
         if (payload is not null)
         {
             request.Content = JsonContent.Create(payload);

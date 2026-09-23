@@ -9,7 +9,7 @@ WinForms (.NET 10) app that syncs **Toggl Track** → **Spesnet/EvolveMed Timeke
 
 ## Flow
 
-`SyncForm` → `SyncService` → `SpesnetTogglSync.TogglApi` + `SpesnetTogglSync.SpesnetApi` (mock or real). Shared models in `SpesnetTogglSync.Shared`. Optional `config-location.json` next to the exe points at a data directory for `appsettings.json`, `syncstate.json`, `mappings.json`, and `logs/`. Central failure breakpoints: `TogglApiHttp.CreateFailure` / `SpesnetApiHttp.CreateFailure`.
+`SyncForm` → `SyncService` → `SpesnetTogglSync.TogglApi` + `SpesnetTogglSync.SpesnetApi` (mock or real). Shared models in `SpesnetTogglSync.Shared`. Optional `config-location.json` next to the exe points at a data directory for `appsettings.json`, `syncstate.json`, `mappings.json`, `invoice-template.docx`, and `logs/`. Do not commit the invoice template. Central failure breakpoints: `TogglApiHttp.CreateFailure` / `SpesnetApiHttp.CreateFailure`.
 
 ## Mapping (required)
 
@@ -25,9 +25,9 @@ Spesnet clients: `GET api/Client/GetClientsByProject?projectId=` (project first)
 - Watermark advances only after a successful save; persist immediately. It must not move past an entry that still needs to sync.
 - Walk entries in start order. Sync the prefix. Stop at the first entry that needs to sync but cannot (running timer, missing client/project/description, missing or `New` mapping, invalid Spesnet destination). Do not sync anything at or after that start time. Report the stop (SAST) so the user can fix it and retry.
 - Skip only permanent Ignore (entry Ignore or client-level Ignore) and continue; those entries should never sync, so the watermark may move past them.
-- One Toggl time-entry API call per sync when possible (`start_date` + `end_date` + `meta=true`). Overlaps still sync; log a warning.
+- One Toggl time-entry API call per sync when possible (`start_date` + `end_date` + `meta=true`). Overlaps still sync; log a warning. After sync, a cycle-range call feeds the earnings balloon. The first sync of a new billing cycle also saves the previous period's Toggl summary and invoice into `{billing report folder}/{yyyy-MM}/`, unless that period still has unsynced entries. Each period keeps one invoice number.
 - Description required on Active sync candidates (whitespace-only counts as missing).
-- Split entries > 8h into ≤8h `normalHours` chunks.
+- Round each entry’s hours to the nearest 0.05 (6.66 → 6.65, 6.68 → 6.70), then split entries > 8h into ≤8h `normalHours` chunks. An entry that rounds to 0 is not posted, but the watermark still moves past it. Earnings and invoice hours stay on the original Toggl time.
 - Keep mock Spesnet path (`UseMockSpesnet`) working alongside the real client.
 
 Prefer `AGENTS.md` and `README.md` for deeper API and file-layout detail.
